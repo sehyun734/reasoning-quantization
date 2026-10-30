@@ -1,4 +1,0 @@
-Fetching 10 files:   0%|          | 0/10 [00:00<?, ?it/s]Fetching 10 files:  80%|████████  | 8/10 [00:00<00:00, 12.63it/s]Fetching 10 files: 100%|██████████| 10/10 [00:00<00:00, 15.04it/s]
-Fetching 3 files:   0%|          | 0/3 [00:00<?, ?it/s]Fetching 3 files: 100%|██████████| 3/3 [00:00<00:00,  7.40it/s]Fetching 3 files: 100%|██████████| 3/3 [00:00<00:00,  7.39it/s]
-merged 619 tensors num_hidden_layers 56
-saved merged/Qwen3-0.6B/num_bits=4,group_size=128,num_samples=128

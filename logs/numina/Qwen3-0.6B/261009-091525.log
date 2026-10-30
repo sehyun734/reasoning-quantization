@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "/content/calibration.py", line 10, in <module>
-    from primitives.model import generate_vllm, load_vllm
-  File "/content/primitives/model.py", line 3, in <module>
-    from vllm import LLM, SamplingParams  # type: ignore
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-ModuleNotFoundError: No module named 'vllm'
-fail
