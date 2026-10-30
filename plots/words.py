@@ -8,7 +8,7 @@ from simple_parsing import parse
 
 from primitives.hub import load_result, result_exists
 from primitives.paths import make_target_path
-from primitives.plot import METHOD_COLORS, get_words, plot_words, save_figure
+from primitives.plot import METHOD_COLORS, get_words, get_words_figsize, plot_words, save_figure
 
 
 @dataclass
@@ -49,15 +49,16 @@ def main() -> None:
                 bf16_word_rates.append(count_word_rates(bf16_think, bf16_think_len))
         rows.extend((method, group, word_rates, bf16_word_rates) for group, (word_rates, bf16_word_rates) in groups.items())
 
-    fig, axes = plt.subplots(len(rows), 3, figsize=(21, len(rows) * (1 + 0.4 * config.num_words)), layout="constrained", squeeze=False)
-    for row_axes, (method, group, word_rates, bf16_word_rates) in zip(axes, rows):
+    fig = plt.figure(figsize=get_words_figsize(config.num_words, len(rows)), layout="constrained")
+    for subfig, (method, group, word_rates, bf16_word_rates) in zip(fig.subfigures(len(rows), 1, squeeze=False)[:, 0], rows):
         words = set().union(*word_rates, *bf16_word_rates)
         mean_rates = {word: mean(rates.get(word, 0) for rates in word_rates) for word in words}
         bf16_mean_rates = {word: mean(rates.get(word, 0) for rates in bf16_word_rates) for word in words}
-        plot_words(row_axes, bf16_mean_rates, mean_rates, method, config.num_words, f"{method}, {len(word_rates)} {group} problems", "mean count per 1k reasoning tokens")
+        plot_words(subfig, bf16_mean_rates, mean_rates, method, config.num_words, f"{method}, {len(word_rates)} {group} problems", "mean count per 1k reasoning tokens")
 
     handles = [Patch(color=METHOD_COLORS[method], label=method) for method in ["bf16", *results]]
-    fig.legend(handles=handles, loc="outside upper center", ncol=len(handles), frameon=False, title=f"{config.model_name} math500 words {file_name}, truncated excluded")
+    fig.suptitle(f"{config.model_name} math500 words {file_name}, truncated excluded")
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
     save_figure(fig, config.model_name, "words")
 
 

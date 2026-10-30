@@ -8,7 +8,7 @@ from transformers import AutoTokenizer
 
 from primitives.hub import load_tensors, result_exists
 from primitives.paths import make_quantized_path
-from primitives.plot import METHOD_COLORS, get_words, plot_words, save_figure
+from primitives.plot import METHOD_COLORS, get_words, get_words_figsize, plot_words, save_figure
 
 
 @dataclass
@@ -33,18 +33,19 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
     token_words = [words[0] if len(words) == 1 else None for words in map(get_words, [tokenizer.decode([token_id]) for token_id in range(len(tokenizer))])]
 
-    fig, axes = plt.subplots(len(results), 3, figsize=(21, len(results) * (1 + 0.4 * config.num_words)), layout="constrained", squeeze=False)
-    for row_axes, (method, result) in zip(axes, results.items()):
+    fig = plt.figure(figsize=get_words_figsize(config.num_words, len(results)), layout="constrained")
+    for subfig, (method, result) in zip(fig.subfigures(len(results), 1, squeeze=False)[:, 0], results.items()):
         is_high = result["entropy"] > result["entropy"].quantile(1 - config.high_entropy_ratio)
         num_high = is_high.sum().item()
         bf16_counts = Counter(token_words[token_id] for token_id in result["bf16_top1"][is_high].tolist() if token_words[token_id])
         counts = Counter(token_words[token_id] for token_id in result["top1"][is_high].tolist() if token_words[token_id])
         bf16_rates = {word: count / num_high * 1000 for word, count in bf16_counts.items()}
         rates = {word: count / num_high * 1000 for word, count in counts.items()}
-        plot_words(row_axes, bf16_rates, rates, method, config.num_words, f"{method}, {num_high} high entropy positions", "top-1 count per 1k high entropy positions")
+        plot_words(subfig, bf16_rates, rates, method, config.num_words, f"{method}, {num_high} high entropy positions", "top-1 count per 1k high entropy positions")
 
     handles = [Patch(color=METHOD_COLORS[method], label=method) for method in ["bf16", *results]]
-    fig.legend(handles=handles, loc="outside upper center", ncol=len(handles), frameon=False, title=f"{config.model_name} math500 teacher forcing words {file_name}, high_entropy_ratio={config.high_entropy_ratio:g}")
+    fig.suptitle(f"{config.model_name} math500 teacher forcing words {file_name}, high_entropy_ratio={config.high_entropy_ratio:g}")
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
     save_figure(fig, config.model_name, "teacher_forcing_words")
 
 

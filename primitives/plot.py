@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 
 from matplotlib.axes import Axes
-from matplotlib.figure import Figure
+from matplotlib.figure import Figure, SubFigure
 import matplotlib.pyplot as plt
 
 METHOD_COLORS = {"bf16": "tab:gray", "gptq": "tab:orange", "awq": "tab:green"}
@@ -10,6 +10,8 @@ BAR_INCHES = 0.5
 BAR_GAP = 1
 PANEL_HEIGHT = 3.5
 PANEL_MARGIN = 0.9
+WORD_BAR_INCHES = 0.12
+WORD_PANEL_WIDTH = 4.5
 STOPWORDS = {"the", "an", "is", "are", "was", "were", "be", "been", "being", "am", "it", "it's", "its", "this", "that", "that's", "these", "those", "of", "to", "in", "on", "at", "by", "with", "from", "as", "into", "for", "and", "or", "we", "me", "my", "our", "us", "you", "your", "he", "she", "they", "them", "their", "his", "her", "there", "there's", "here", "which", "what", "where", "who", "how", "has", "have", "had", "do", "does", "did", "can", "could", "would", "will"}
 MARKERS = {
     "doubt": ["wait", "but", "however", "hmm", "wrong"],
@@ -82,8 +84,16 @@ def fit_bar_width(
         fig.set_figwidth(fig.get_figwidth() + BAR_INCHES * num_bars - axes_width)
 
 
+def get_words_figsize(
+    num_words: int,
+    num_rows: int,
+) -> tuple[float, float]:
+    num_slots = max(num_words, sum(map(len, MARKERS.values())))
+    return WORD_PANEL_WIDTH * 3, num_rows * (WORD_BAR_INCHES * num_slots * (2 + BAR_GAP) + 1.2) + 0.8
+
+
 def plot_words(
-    axes: list[Axes],
+    subfig: SubFigure,
     bf16_rates: dict[str, float],
     rates: dict[str, float],
     method: str,
@@ -93,18 +103,21 @@ def plot_words(
 ) -> None:
     words = sorted(bf16_rates.keys() | rates.keys(), key=lambda word: rates.get(word, 0) - bf16_rates.get(word, 0), reverse=True)
     word_groups = {"increased": words[:num_words], "decreased": words[::-1][:num_words], "markers": [word for marker_words in MARKERS.values() for word in marker_words]}
-    for ax, (group, group_words) in zip(axes, word_groups.items()):
-        ys = range(len(group_words))
-        for offset, color, method_rates in [(-0.2, METHOD_COLORS["bf16"], bf16_rates), (0.2, METHOD_COLORS[method], rates)]:
-            values = [method_rates.get(word, 0) for word in group_words]
-            ax.barh([y + offset for y in ys], values, height=0.4, color=color)
-            for y, value in zip(ys, values):
-                ax.annotate(f"{value:.2f}", (value, y + offset), xytext=(4, 0), textcoords="offset points", va="center", fontsize=8)
-        ax.set_yticks(ys, group_words)
-        ax.invert_yaxis()
-        ax.margins(x=0.25)
-        ax.set_title(f"{title}\n{group}", fontsize=10)
+    slot_width = 2 + BAR_GAP
+    num_slots = max(map(len, word_groups.values()))
+    for ax, (group, group_words) in zip(subfig.subplots(1, len(word_groups)), word_groups.items()):
+        for index, (color, method_rates) in enumerate([(METHOD_COLORS["bf16"], bf16_rates), (METHOD_COLORS[method], rates)]):
+            ys = [slot * slot_width + index - 0.5 for slot in range(len(group_words))]
+            ax.barh(ys, [method_rates.get(word, 0) for word in group_words], height=1, color=color)
+        for slot, word in enumerate(group_words):
+            bf16_rate, rate = bf16_rates.get(word, 0), rates.get(word, 0)
+            ax.annotate(f"{rate / bf16_rate:.2f}x" if bf16_rate else "new", (max(bf16_rate, rate), slot * slot_width), xytext=(4, 0), textcoords="offset points", va="center", fontsize=8)
+        ax.set_yticks([slot * slot_width for slot in range(len(group_words))], group_words)
+        ax.set_ylim((num_slots - 0.5) * slot_width, -slot_width / 2)
+        ax.margins(x=0.15)
+        ax.set_title(group)
         ax.set_xlabel(xlabel)
+    subfig.suptitle(title)
 
 
 def save_figure(
