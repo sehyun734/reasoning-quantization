@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
 from simple_parsing import parse
 import torch
 from torch import Tensor
@@ -9,7 +10,7 @@ from transformers import AutoTokenizer
 
 from primitives.hub import load_tensors, result_exists
 from primitives.paths import make_quantized_path
-from primitives.plot import METHOD_COLORS, save_figure
+from primitives.plot import METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
 
 ENTROPY_COLORS = {"low entropy": "tab:blue", "high entropy": "tab:red"}
 TOKEN_CLASSES = ["digit", "symbol", "alpha", "other"]
@@ -53,53 +54,48 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
     token_classes = get_token_classes([tokenizer.decode([token_id]) for token_id in range(len(tokenizer))])
 
-    fig, axes = plt.subplots(len(results), 4, figsize=(16, 4 * len(results)), layout="constrained", squeeze=False)
-    for row_axes, (method, result) in zip(axes, results.items()):
+    panel_widths = [get_panel_width(len(ENTROPY_COLORS), 1), get_panel_width(len(TOKEN_CLASSES), 2), get_panel_width(len(TOKEN_CLASSES), 2)]
+    fig = plt.figure(figsize=get_figsize(panel_widths, len(results)), layout="constrained")
+    for subfig, (method, result) in zip(fig.subfigures(len(results), 1, squeeze=False)[:, 0], results.items()):
+        axes = subfig.subplots(1, len(panel_widths), width_ratios=panel_widths)
         kl = result["kl"]
         mismatch = (result["bf16_top1"] != result["top1"]).float()
         is_high = result["entropy"] > result["entropy"].quantile(1 - config.high_entropy_ratio)
         group_masks = {"low entropy": ~is_high, "high entropy": is_high}
-
-        group_values = {
-            "share of kl": [(kl[group_mask].sum() / kl.sum()).item() for group_mask in group_masks.values()],
-            "top-1 mismatch": [mismatch[group_mask].mean().item() for group_mask in group_masks.values()],
-        }
-        for ax, (name, values) in zip(row_axes[:2], group_values.items()):
-            ax.bar(range(len(group_masks)), values, width=0.4, color=list(ENTROPY_COLORS.values()))
-            for x, value in enumerate(values):
-                ax.annotate(f"{value:.1%}", (x, value), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontsize=8)
-            ax.set_xticks(range(len(group_masks)), list(group_masks))
-            ax.set_xlim(-0.75, len(group_masks) - 0.25)
-            ax.set_ylabel(name)
-            ax.set_title(f"{method}\n{name}", fontsize=10)
-
-        ax = row_axes[2]
         classes = token_classes[result["think_ids"]]
-        for offset, (group, group_mask) in zip([-0.2, 0.2], group_masks.items()):
-            group_mismatches = [mismatch[(classes == index) & group_mask].mean().item() for index in range(len(TOKEN_CLASSES))]
-            ax.bar([x + offset for x in range(len(TOKEN_CLASSES))], group_mismatches, width=0.4, color=ENTROPY_COLORS[group])
-            for x, group_mismatch in enumerate(group_mismatches):
-                ax.annotate(f"{group_mismatch:.1%}", (x + offset, group_mismatch), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontsize=8)
-        ax.set_xticks(range(len(TOKEN_CLASSES)), TOKEN_CLASSES)
-        ax.set_ylabel("top-1 mismatch")
-        ax.set_title(f"{method}\ntop-1 mismatch by token class", fontsize=10)
 
-        ax = row_axes[3]
-        for offset, color, probs in [(-0.2, METHOD_COLORS["bf16"], result["bf16_prob"]), (0.2, METHOD_COLORS[method], result["prob"])]:
+        kl_shares = [(kl[group_mask].sum() / kl.sum()).item() for group_mask in group_masks.values()]
+        plot_bars(axes[0], list(group_masks), [(kl_shares, list(ENTROPY_COLORS.values()), [f"{kl_share:.1%}" for kl_share in kl_shares])])
+        axes[0].set_ylabel("share of total kl")
+        axes[0].set_title("kl share by entropy")
+
+        groups = []
+        for group, group_mask in group_masks.items():
+            group_mismatches = [mismatch[(classes == index) & group_mask].mean().item() for index in range(len(TOKEN_CLASSES))]
+            groups.append((group_mismatches, ENTROPY_COLORS[group], [f"{group_mismatch:.1%}" for group_mismatch in group_mismatches]))
+        plot_bars(axes[1], TOKEN_CLASSES, groups)
+        axes[1].set_ylabel("top-1 mismatch rate")
+        axes[1].set_title("top-1 mismatch by token class")
+
+        groups = []
+        for color, probs in [(METHOD_COLORS["bf16"], result["bf16_prob"]), (METHOD_COLORS[method], result["prob"])]:
             tail_masses = [(1 - probs[(classes == index) & ~is_high]).mean().item() for index in range(len(TOKEN_CLASSES))]
-            ax.bar([x + offset for x in range(len(TOKEN_CLASSES))], tail_masses, width=0.4, color=color)
-            for x, tail_mass in enumerate(tail_masses):
-                ax.annotate(f"{tail_mass:.1%}", (x + offset, tail_mass), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontsize=8)
-        ax.set_xticks(range(len(TOKEN_CLASSES)), TOKEN_CLASSES)
-        ax.set_ylabel("tail mass")
-        ax.set_title(f"{method}\nlow entropy tail mass by token class", fontsize=10)
-        for ax in row_axes:
+            groups.append((tail_masses, color, [f"{tail_mass:.1%}" for tail_mass in tail_masses]))
+        plot_bars(axes[2], TOKEN_CLASSES, groups)
+        axes[2].set_ylabel("1 - prob of bf16 top-1 token")
+        axes[2].set_title("low entropy tail mass by token class")
+
+        for ax in axes:
             ax.margins(y=0.2)
             ax.set_ylim(bottom=0)
+            ax.yaxis.set_major_formatter(PercentFormatter(1, decimals=0))
+        subfig.suptitle(method)
 
     handles = [Patch(color=color, label=group) for group, color in ENTROPY_COLORS.items()]
     handles += [Patch(color=METHOD_COLORS[method], label=method) for method in ["bf16", *results]]
-    fig.legend(handles=handles, loc="outside upper center", ncol=len(handles), frameon=False, title=f"{config.model_name} math500 teacher forcing {file_name}, high_entropy_ratio={config.high_entropy_ratio:g}")
+    fig.suptitle(f"{config.model_name} math500 teacher forcing {file_name}, high_entropy_ratio={config.high_entropy_ratio:g}")
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
+    fit_bar_width(fig, axes)
     save_figure(fig, config.model_name, "teacher_forcing")
 
 
