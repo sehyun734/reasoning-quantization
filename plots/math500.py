@@ -2,11 +2,12 @@ from dataclasses import dataclass
 from statistics import mean, median
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
 from simple_parsing import parse
 
 from primitives.hub import load_result, result_exists
 from primitives.paths import make_target_path
-from primitives.plot import METHOD_COLORS, save_figure
+from primitives.plot import METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
 
 
 @dataclass
@@ -44,21 +45,21 @@ def main() -> None:
         loops.append(mean(is_loop(think) for think in result["thinks"]))
     panels = [
         ("accuracy", accuracies, [f"{accuracy:.1%}\ntruncated {truncated:.1%}" for accuracy, truncated in zip(accuracies, truncateds)]),
-        ("reasoning tokens / bf16 (median)", ratios, [f"{ratio:.2f}x" for ratio in ratios]),
-        ("loop ratio", loops, [f"{loop:.1%}" for loop in loops]),
+        ("median reasoning tokens / bf16, both correct", ratios, [f"{ratio:.2f}x" for ratio in ratios]),
+        ("looped reasoning ratio", loops, [f"{loop:.1%}" for loop in loops]),
     ]
 
-    fig, axes = plt.subplots(1, len(panels), figsize=((1 + len(methods)) * len(panels), 4), layout="constrained")
+    panel_widths = [get_panel_width(len(methods), 1)] * len(panels)
+    fig, axes = plt.subplots(1, len(panels), figsize=get_figsize(panel_widths, 1), width_ratios=panel_widths, layout="constrained")
     for ax, (ylabel, values, texts) in zip(axes, panels):
-        ax.bar(range(len(methods)), values, width=0.4, color=[METHOD_COLORS[method] for method in methods])
-        for x, (value, text) in enumerate(zip(values, texts)):
-            ax.annotate(text, (x, value), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontsize=8)
-        ax.set_xticks(range(len(methods)), methods)
-        ax.set_xlim(-0.75, len(methods) - 0.25)
+        plot_bars(ax, methods, [(values, [METHOD_COLORS[method] for method in methods], texts)])
         ax.set_ylabel(ylabel)
         ax.margins(y=0.2)
         ax.set_ylim(bottom=0)
+    for ax in [axes[0], axes[2]]:
+        ax.yaxis.set_major_formatter(PercentFormatter(1, decimals=0))
     fig.suptitle(f"{config.model_name} math500 {file_name}")
+    fit_bar_width(fig, axes)
     save_figure(fig, config.model_name, "math500")
 
 
