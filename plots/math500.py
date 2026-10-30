@@ -44,7 +44,7 @@ def main() -> None:
         loops.append(mean(is_loop(think) for think in result["thinks"]))
     panels = [
         ("accuracy", accuracies, [f"{accuracy:.1%}\ntruncated {truncated:.1%}" for accuracy, truncated in zip(accuracies, truncateds)]),
-        ("reasoning tokens / bf16", ratios, [f"{ratio:.2f}x" for ratio in ratios]),
+        ("reasoning tokens / bf16 (median)", ratios, [f"{ratio:.2f}x" for ratio in ratios]),
         ("loop ratio", loops, [f"{loop:.1%}" for loop in loops]),
     ]
 
