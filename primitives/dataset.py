@@ -40,3 +40,8 @@ def load_numina(
 ) -> list[Tensor]:
     tensors = load_file(download_file(f"{path}/inputs.safetensors"))
     return list(tensors["input_ids"].split(tensors["input_lens"].tolist()))
+
+
+def load_math500() -> list[tuple[str, str]]:
+    dataset = load_dataset("HuggingFaceH4/MATH-500", split="test")
+    return [(MATH_PROMPT.format(problem=row["problem"]), row["answer"]) for row in dataset]
