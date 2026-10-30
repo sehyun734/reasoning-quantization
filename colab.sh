@@ -18,7 +18,7 @@ trap 'rm -f "$tar_path"; colab stop -s "$session" || true' EXIT
 # start colab session
 colab new -s "$session" --gpu A100
 # upload project without local-only files
-COPYFILE_DISABLE=1 tar -czf "$tar_path" --exclude .venv --exclude __pycache__ --exclude logs .
+COPYFILE_DISABLE=1 tar -czf "$tar_path" --exclude .venv --exclude __pycache__ --exclude logs --exclude figures .
 colab upload -s "$session" "$tar_path" content/project.tar.gz
 
 # extract, install packages, and run entry
