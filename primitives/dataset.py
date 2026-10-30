@@ -37,7 +37,6 @@ def save_numina(
 
 def load_numina(
     path: str,
-    max_sequence_len: int,
 ) -> list[Tensor]:
     tensors = load_file(download_file(f"{path}/inputs.safetensors"))
-    return [sample_input_ids[:max_sequence_len] for sample_input_ids in tensors["input_ids"].split(tensors["input_lens"].tolist())]
+    return list(tensors["input_ids"].split(tensors["input_lens"].tolist()))
