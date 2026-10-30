@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from statistics import mean, median
+from statistics import mean
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
@@ -7,7 +7,7 @@ from simple_parsing import parse
 
 from primitives.hub import load_result, result_exists
 from primitives.paths import make_target_path
-from primitives.plot import METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
+from primitives.plot import METHOD_COLORS, fit_bar_width, get_length_ratio, get_loop_ratio, get_figsize, get_panel_width, plot_bars, save_figure
 
 
 @dataclass
@@ -17,12 +17,6 @@ class Config:
     group_size: int = 128
     num_samples: int = 128
     seed: int = 0
-
-
-def is_loop(
-    think: str,
-) -> bool:
-    return len(think) > 200 and think[:-200].count(think[-200:-150]) >= 5
 
 
 def main() -> None:
@@ -41,8 +35,8 @@ def main() -> None:
         result = results[method]
         accuracies.append(result["accuracy"])
         truncateds.append(mean(result["truncateds"]))
-        ratios.append(median(think_len / bf16_think_len for think_len, bf16_think_len, correct, bf16_correct in zip(result["think_lens"], bf16_result["think_lens"], result["corrects"], bf16_result["corrects"]) if correct and bf16_correct))
-        loops.append(mean(is_loop(think) for think in result["thinks"]))
+        ratios.append(get_length_ratio(result, bf16_result))
+        loops.append(get_loop_ratio(result))
     panels = [
         ("accuracy", accuracies, [f"{accuracy:.1%}\ntruncated {truncated:.1%}" for accuracy, truncated in zip(accuracies, truncateds)]),
         ("median reasoning tokens / bf16, both correct", ratios, [f"{ratio:.2f}x" for ratio in ratios]),
