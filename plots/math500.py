@@ -48,12 +48,13 @@ def main() -> None:
         ("loop ratio", loops, [f"{loop:.1%}" for loop in loops]),
     ]
 
-    fig, axes = plt.subplots(1, len(panels), figsize=(4 * len(panels), 4), layout="constrained")
+    fig, axes = plt.subplots(1, len(panels), figsize=((1 + len(methods)) * len(panels), 4), layout="constrained")
     for ax, (ylabel, values, texts) in zip(axes, panels):
-        ax.bar(range(len(methods)), values, color=[METHOD_COLORS[method] for method in methods])
+        ax.bar(range(len(methods)), values, width=0.4, color=[METHOD_COLORS[method] for method in methods])
         for x, (value, text) in enumerate(zip(values, texts)):
             ax.annotate(text, (x, value), xytext=(0, 4), textcoords="offset points", ha="center", va="bottom", fontsize=8)
         ax.set_xticks(range(len(methods)), methods)
+        ax.set_xlim(-0.75, len(methods) - 0.25)
         ax.set_ylabel(ylabel)
         ax.margins(y=0.2)
         ax.set_ylim(bottom=0)
