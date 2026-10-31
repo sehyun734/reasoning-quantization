@@ -16,7 +16,7 @@ from primitives.utils import format_duration
 @dataclass
 class Config:
     model_name: str = "Qwen/Qwen3-0.6B"
-    method: Literal["bf16", "gptq", "awq"] = "bf16"
+    method: Literal["bf16", "gptq", "awq", "mxfp4"] = "bf16"
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128

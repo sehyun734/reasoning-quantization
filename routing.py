@@ -37,7 +37,7 @@ from primitives.utils import format_duration
 @dataclass
 class Config:
     model_name: str = "Qwen/Qwen3-0.6B"
-    method: Literal["gptq", "awq"] = "gptq"
+    method: Literal["gptq", "awq", "mxfp4"] = "gptq"
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
