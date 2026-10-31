@@ -47,7 +47,7 @@ def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
     results = {}
-    for method in ["gptq", "awq"]:
+    for method in ["gptq", "awq", "mxfp4"]:
         quantized_path = make_quantized_path(method, config.model_name, config.num_bits, config.group_size, config.num_samples)
         if result_exists("teacher_forcing", quantized_path, file_name, "safetensors"):
             results[method] = load_tensors("teacher_forcing", quantized_path, file_name)

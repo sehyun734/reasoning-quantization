@@ -30,7 +30,7 @@ def main() -> None:
     file_name = f"seed={config.seed}"
     bf16_result = load_result("math500", make_target_path("bf16", config.model_name, config.num_bits, config.group_size, config.num_samples), file_name)
     results = {}
-    for method in ["gptq", "awq"]:
+    for method in ["gptq", "awq", "mxfp4"]:
         quantized_path = make_quantized_path(method, config.model_name, config.num_bits, config.group_size, config.num_samples)
         route_results = {}
         for route in ROUTE_COLORS:

@@ -23,7 +23,7 @@ def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
     results = {}
-    for method in ["bf16", "gptq", "awq"]:
+    for method in ["bf16", "gptq", "awq", "mxfp4"]:
         target = make_target_path(method, config.model_name, config.num_bits, config.group_size, config.num_samples)
         if result_exists("math500", target, file_name):
             results[method] = load_result("math500", target, file_name)
@@ -51,7 +51,7 @@ def main() -> None:
         ax.margins(y=0.2)
         ax.set_ylim(bottom=0)
     for ax in [axes[0], axes[2]]:
-        ax.yaxis.set_major_formatter(PercentFormatter(1, decimals=0))
+        ax.yaxis.set_major_formatter(PercentFormatter(1))
     fig.suptitle(f"{config.model_name} math500 {file_name}")
     fit_bar_width(fig, axes)
     save_figure(fig, config.model_name, "math500")
