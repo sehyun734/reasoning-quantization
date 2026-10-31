@@ -7,6 +7,12 @@ def make_numina_path(
     return f"numina/{model_name}/num_samples={num_samples},max_generation_len={max_generation_len},seed={seed}"
 
 
+def make_mxfp4_path(
+    model_name: str,
+) -> str:
+    return f"mxfp4/{model_name}"
+
+
 def make_quantized_path(
     method: str,
     model_name: str,
@@ -14,6 +20,8 @@ def make_quantized_path(
     group_size: int,
     num_samples: int,
 ) -> str:
+    if method == "mxfp4":
+        return make_mxfp4_path(model_name)
     return f"{method}/{model_name}/num_bits={num_bits},group_size={group_size},num_samples={num_samples}"
 
 
