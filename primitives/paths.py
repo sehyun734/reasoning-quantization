@@ -52,6 +52,13 @@ def make_qat_path(
     return f"qat/{model_name}/num_bits={num_bits},group_size={group_size},qat_num_samples={qat_num_samples},loss={loss},hidden_weight={hidden_weight},on_policy={on_policy},scale_learning_rate={scale_learning_rate},lr_schedule={lr_schedule},num_epochs={num_epochs}"
 
 
+def make_penalty_path(
+    target: str,
+    penalty: float,
+) -> str:
+    return f"penalty/{target}/penalty={penalty}"
+
+
 def make_routing_path(
     quantized_path: str,
     route_ratio: float,

@@ -29,9 +29,10 @@ def generate_vllm(
     prompts: list[str],
     max_generation_len: int,
     seed: int,
+    logit_bias: dict[int, float] | None = None,
 ) -> list[CompletionOutput]:
     messages = [[{"role": "user", "content": prompt}] for prompt in prompts]
     # qwen3's recommended settings for thinking mode
-    sampling_params = SamplingParams(temperature=0.6, top_p=0.95, top_k=20, max_tokens=max_generation_len, seed=seed)
+    sampling_params = SamplingParams(temperature=0.6, top_p=0.95, top_k=20, max_tokens=max_generation_len, seed=seed, logit_bias=logit_bias)
     outputs = model.chat(messages, sampling_params, use_tqdm=True, chat_template_kwargs={"enable_thinking": True})
     return [output.outputs[0] for output in outputs]
