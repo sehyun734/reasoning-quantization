@@ -10,9 +10,8 @@ from transformers import AutoTokenizer
 
 from primitives.hub import load_tensors, result_exists
 from primitives.paths import make_quantized_path
-from primitives.plot import METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
+from primitives.plot import ENTROPY_COLORS, METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
 
-ENTROPY_COLORS = {"low entropy": "tab:blue", "high entropy": "tab:red"}
 TOKEN_CLASSES = ["digit", "symbol", "alpha", "other"]
 
 
