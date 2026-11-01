@@ -3,9 +3,10 @@ from simple_parsing import parse
 from plots.qat import Config, plot_qat
 
 SCHEDULE_VARIANTS = {
-    "qat\nconstant\n1 epoch": (0.0, False, 0.0, "constant", 1, "tab:pink"),
-    "qat\ncosine\n1 epoch": (0.0, False, 0.0, "cosine", 1, "orchid"),
-    "qat\ncosine\n3 epochs": (0.0, False, 0.0, "cosine", 3, "darkmagenta"),
+    "constant\n1 epoch": (0.0, False, 0.0, "constant", 1, "tab:pink"),
+    "cosine\n1 epoch": (0.0, False, 0.0, "cosine", 1, "orchid"),
+    "cosine\n3 epochs": (0.0, False, 0.0, "cosine", 3, "darkmagenta"),
+    "cosine 3 epochs\n+ hidden loss": (1.0, False, 0.0, "cosine", 3, "tab:olive"),
 }
 
 
