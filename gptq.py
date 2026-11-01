@@ -25,6 +25,7 @@ class Config:
     # which numina data to use as calibration
     num_samples: int = 128
     max_generation_len: int = 2048
+    max_sequence_len: int = 2048
     seed: int = 0
 
 
@@ -93,7 +94,7 @@ def main() -> None:
     config = parse(Config)
     quantized_path = make_quantized_path("gptq", config.model_name, config.num_bits, config.group_size, config.num_samples)
     model, _ = load_model(config.model_name, config.model_name)
-    samples = load_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed))
+    samples = [input_ids[: config.max_sequence_len] for input_ids in load_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed))]
     layers = model.model.layers
     grid = {}
 

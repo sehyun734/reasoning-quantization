@@ -27,6 +27,8 @@ class Config:
     # which numina data to use as calibration
     num_samples: int = 128
     max_generation_len: int = 2048
+    # NOTE: saved awq results were not cut, so accuracy may differ, but only very slightly
+    max_sequence_len: int = 2048
     seed: int = 0
 
 
@@ -174,7 +176,7 @@ def find_clip(
 def main() -> None:
     config = parse(Config)
     model, _ = load_model(config.model_name, config.model_name)
-    samples = load_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed))
+    samples = [input_ids[: config.max_sequence_len] for input_ids in load_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed))]
     layers = model.model.layers
 
     log_time = time.perf_counter()
