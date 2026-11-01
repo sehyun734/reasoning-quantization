@@ -7,7 +7,7 @@ from matplotlib.figure import Figure, SubFigure
 import matplotlib.pyplot as plt
 import math_verify
 
-METHOD_COLORS = {"bf16": "tab:gray", "gptq": "tab:orange", "awq": "tab:green", "mxfp4": "tab:brown", "qat": "tab:pink"}
+METHOD_COLORS = {"bf16": "tab:gray", "gptq": "tab:orange", "awq": "tab:green", "mxfp4": "tab:brown"}
 ENTROPY_COLORS = {"low entropy": "tab:blue", "high entropy": "tab:red"}
 BAR_INCHES = 0.5
 BAR_GAP = 1

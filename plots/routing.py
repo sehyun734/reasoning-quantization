@@ -46,7 +46,7 @@ def main() -> None:
         ("accuracy", lambda result: result["accuracy"], "{x:.1%}"),
         ("median reasoning tokens / bf16, both correct", lambda result: get_length_ratio(result, bf16_result), "{x:.2f}x"),
         ("looped reasoning ratio", get_loop_ratio, "{x:.1%}"),
-        ("wrong answers reaching correct answer midway", lambda result: get_intermediate_answer_ratio(result, answers), "{x:.1%}"),
+        ("correct intermediate, wrong final answer", lambda result: get_intermediate_answer_ratio(result, answers), "{x:.1%}"),
     ]
 
     panel_widths = [get_panel_width(len(ROUTE_RATIOS), len(ROUTE_COLORS))] * len(panels)
