@@ -27,7 +27,8 @@ class Config:
     # which numina data to use as calibration
     num_samples: int = 128
     max_generation_len: int = 2048
-    # NOTE: saved awq results were not cut, so accuracy may differ, but only very slightly
+    # NOTE: saved awq model and results on hf hub used uncut calibration
+    #       so accuracy may differ, but only very slightly
     max_sequence_len: int = 2048
     seed: int = 0
 
