@@ -12,17 +12,18 @@ from transformers import PreTrainedModel
 from primitives.dataset import load_math500
 from primitives.hub import download_model, load_result, result_exists, save_tensors
 from primitives.model import load_model
-from primitives.paths import make_quantized_path
+from primitives.paths import make_qat_path, make_quantized_path
 from primitives.utils import format_duration, format_memory
 
 
 @dataclass
 class Config:
     model_name: str = "Qwen/Qwen3-0.6B"
-    method: Literal["gptq", "awq", "mxfp4"] = "gptq"
+    method: Literal["gptq", "awq", "mxfp4", "qat"] = "gptq"
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
+    hidden_weight: float = 1.0
     seed: int = 0
     chunk_len: int = 2048
 
@@ -39,7 +40,10 @@ def get_think_hiddens(
 def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
-    quantized_path = make_quantized_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
+    if config.method == "qat":
+        quantized_path = make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight)
+    else:
+        quantized_path = make_quantized_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists("teacher_forcing", quantized_path, file_name, "safetensors"):
         print(f"{quantized_path} already computed")
         return

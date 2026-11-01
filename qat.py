@@ -139,7 +139,7 @@ def main() -> None:
             parent_name, child_name = name.rsplit(".", 1)
             setattr(model.model.layers.get_submodule(parent_name), child_name, module)
     model.to(torch.bfloat16)
-    save_quantized(make_qat_path(quantized_path, config.hidden_weight), model)
+    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight), model)
 
 
 if __name__ == "__main__":

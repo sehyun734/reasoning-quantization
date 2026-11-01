@@ -9,17 +9,18 @@ from primitives.dataset import load_math500
 from primitives.evaluation import evaluate_math500
 from primitives.hub import download_model, result_exists, save_result
 from primitives.model import THINK_END, generate_vllm, load_vllm
-from primitives.paths import make_target_path
+from primitives.paths import make_qat_path, make_target_path
 from primitives.utils import format_duration
 
 
 @dataclass
 class Config:
     model_name: str = "Qwen/Qwen3-0.6B"
-    method: Literal["bf16", "gptq", "awq", "mxfp4"] = "bf16"
+    method: Literal["bf16", "gptq", "awq", "mxfp4", "qat"] = "bf16"
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
+    hidden_weight: float = 1.0
     max_generation_len: int = 32768
     seed: int = 0
 
@@ -27,7 +28,10 @@ class Config:
 def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
-    target = make_target_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
+    if config.method == "qat":
+        target = make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight)
+    else:
+        target = make_target_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists("math500", target, file_name):
         print(f"{target} already evaluated")
         return
