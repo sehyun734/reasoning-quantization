@@ -33,6 +33,7 @@ class Config:
     # cut prompt + reasoning to this length
     max_sequence_len: int = 8192
     num_train_samples: int = 2048
+    loss: Literal["kl", "ce", "cakld"] = "kl"
     hidden_weight: float = 0.0
     on_policy: bool = False
     scale_learning_rate: float = 0.0
@@ -100,6 +101,19 @@ def get_kl_by_entropy(
     return kl[~is_high].mean().item(), kl[is_high].mean().item()
 
 
+@torch.no_grad()
+def get_confidence(
+    bf16_model: PreTrainedModel,
+    samples: list[Tensor],
+) -> float:
+    probs = []
+    for input_ids in samples:
+        input_ids = input_ids[None].to(bf16_model.device)
+        logprobs = log_softmax(bf16_model(input_ids=input_ids).logits[0, :-1].float(), dim=-1)
+        probs.append(logprobs.gather(-1, input_ids[0, 1:, None])[:, 0].exp().cpu())
+    return torch.cat(probs).mean().item()
+
+
 def main() -> None:
     config = parse(Config)
     set_seed(config.seed)
@@ -135,6 +149,9 @@ def main() -> None:
     else:
         scheduler = get_constant_schedule(optimizer)
 
+    if config.loss == "cakld":
+        confidence = get_confidence(bf16_model, samples)
+        print(f"confidence {confidence:.4f}")
     low_kl, high_kl = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
     print(f"before training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f}")
     kls = []
@@ -157,16 +174,22 @@ def main() -> None:
                     bf16_logprobs = log_softmax(bf16_model.lm_head(bf16_hiddens).float(), dim=-1)
                     bf16_probs = bf16_logprobs.exp()
                     entropy = -(bf16_probs * bf16_logprobs).sum(dim=-1)
-                    del bf16_logprobs
                     bf16_hiddens = bf16_hiddens.float()
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     hiddens = model.model(input_ids=input_ids).last_hidden_state[0, :-1]
                     logprobs = log_softmax(model.lm_head(hiddens).float(), dim=-1)
                 # kl to bf16 distribution
                 kl = -entropy - (bf16_probs * logprobs).sum(dim=-1)
+                if config.loss == "ce":
+                    target_loss = -logprobs.gather(-1, input_ids[0, 1:, None])[:, 0]
+                elif config.loss == "cakld":
+                    reverse_kl = (logprobs.exp() * (logprobs - bf16_logprobs)).sum(dim=-1)
+                    target_loss = confidence * reverse_kl + (1 - confidence) * kl
+                else:
+                    target_loss = kl
                 # hidden error to bf16 weighted by entropy (higher entropy, more weight)
                 hidden_loss = entropy * ((hiddens.float() - bf16_hiddens) ** 2).sum(dim=-1) / (bf16_hiddens**2).sum(dim=-1)
-                loss = (kl.sum() + config.hidden_weight * hidden_loss.sum()) / num_positions
+                loss = (target_loss.sum() + config.hidden_weight * hidden_loss.sum()) / num_positions
                 loss.backward()
                 batch_kl += kl.sum().item() / num_positions
                 batch_hidden_loss += hidden_loss.sum().item() / num_positions
@@ -193,7 +216,7 @@ def main() -> None:
             parent_name, child_name = name.rsplit(".", 1)
             setattr(model.model.layers.get_submodule(parent_name), child_name, module)
     model.to(torch.bfloat16)
-    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs), model)
+    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs), model)
 
 
 if __name__ == "__main__":
