@@ -12,11 +12,11 @@ from primitives.paths import make_qat_path, make_target_path
 from primitives.plot import ENTROPY_COLORS, METHOD_COLORS, PANEL_MARGIN, fit_bar_width, get_figsize, get_intermediate_answer_ratio, get_length_ratio, get_loop_ratio, get_panel_width, plot_bars, save_figure
 
 QAT_VARIANTS = {
-    "qat\nkl only": (0.0, False, 0.0, "tab:pink"),
-    "qat\n+ hidden loss": (1.0, False, 0.0, "tab:olive"),
-    "qat\non-policy": (0.0, True, 0.0, "tab:cyan"),
-    "qat\nlsq 1e-6": (0.0, False, 1e-06, "gold"),
-    "qat\nlsq 1e-5": (0.0, False, 1e-05, "darkgoldenrod"),
+    "qat\nkl only": (0.0, False, 0.0, "constant", 1, "tab:pink"),
+    "qat\n+ hidden loss": (1.0, False, 0.0, "constant", 1, "tab:olive"),
+    "qat\non-policy": (0.0, True, 0.0, "constant", 1, "tab:cyan"),
+    "qat\nlsq 1e-6": (0.0, False, 1e-06, "constant", 1, "gold"),
+    "qat\nlsq 1e-5": (0.0, False, 1e-05, "constant", 1, "darkgoldenrod"),
 }
 
 
@@ -34,8 +34,8 @@ def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
     targets = {method: make_target_path(method, config.model_name, config.num_bits, config.group_size, config.num_samples) for method in ["bf16", "gptq"]}
-    for label, (hidden_weight, on_policy, scale_learning_rate, _) in QAT_VARIANTS.items():
-        targets[label] = make_qat_path(config.model_name, config.num_bits, config.group_size, hidden_weight, on_policy, scale_learning_rate)
+    for label, (hidden_weight, on_policy, scale_learning_rate, lr_schedule, num_epochs, _) in QAT_VARIANTS.items():
+        targets[label] = make_qat_path(config.model_name, config.num_bits, config.group_size, hidden_weight, on_policy, scale_learning_rate, lr_schedule, num_epochs)
     labels = list(targets)
     colors = [METHOD_COLORS["bf16"], METHOD_COLORS["gptq"]] + [color for *_, color in QAT_VARIANTS.values()]
     results = {label: load_result("math500", target, file_name) for label, target in targets.items()}

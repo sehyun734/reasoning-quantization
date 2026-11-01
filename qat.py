@@ -78,7 +78,7 @@ class STELinear(Module):
 
 
 @torch.no_grad()
-def evaluate(
+def get_kl_by_entropy(
     model: PreTrainedModel,
     bf16_model: PreTrainedModel,
     samples: list[Tensor],
@@ -135,7 +135,7 @@ def main() -> None:
     else:
         scheduler = get_constant_schedule(optimizer)
 
-    low_kl, high_kl = evaluate(model, bf16_model, samples, config.high_entropy_ratio)
+    low_kl, high_kl = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
     print(f"before training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f}")
     kls = []
     hidden_losses = []
@@ -183,7 +183,7 @@ def main() -> None:
                 log_time = time.perf_counter()
                 torch.cuda.reset_peak_memory_stats()
 
-    low_kl, high_kl = evaluate(model, bf16_model, samples, config.high_entropy_ratio)
+    low_kl, high_kl = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
     print(f"after training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f}")
     if not config.save:
         return
@@ -193,7 +193,7 @@ def main() -> None:
             parent_name, child_name = name.rsplit(".", 1)
             setattr(model.model.layers.get_submodule(parent_name), child_name, module)
     model.to(torch.bfloat16)
-    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight, config.on_policy, config.scale_learning_rate), model)
+    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs), model)
 
 
 if __name__ == "__main__":

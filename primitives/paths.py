@@ -44,8 +44,10 @@ def make_qat_path(
     hidden_weight: float,
     on_policy: bool,
     scale_learning_rate: float,
+    lr_schedule: str,
+    num_epochs: int,
 ) -> str:
-    return f"qat/{model_name}/num_bits={num_bits},group_size={group_size},hidden_weight={hidden_weight},on_policy={on_policy},scale_learning_rate={scale_learning_rate}"
+    return f"qat/{model_name}/num_bits={num_bits},group_size={group_size},hidden_weight={hidden_weight},on_policy={on_policy},scale_learning_rate={scale_learning_rate},lr_schedule={lr_schedule},num_epochs={num_epochs}"
 
 
 def make_routing_path(
