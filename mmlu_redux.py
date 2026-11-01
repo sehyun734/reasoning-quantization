@@ -27,6 +27,8 @@ class Config:
     scale_learning_rate: float = 0.0
     lr_schedule: Literal["constant", "cosine"] = "constant"
     num_epochs: int = 1
+    # smallest subject (virology) has 43 error-free problems, so take 40 from each
+    # and keep dataset small to save generation time
     num_per_subject: int = 40
     max_generation_len: int = 32768
     seed: int = 0

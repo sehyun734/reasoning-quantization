@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn.functional import log_softmax
 from transformers import PreTrainedModel
 
-from primitives.dataset import load_math500
+from primitives.dataset import load_math500, load_mmlu_redux
 from primitives.hub import download_model, load_result, result_exists, save_tensors
 from primitives.model import load_model
 from primitives.paths import make_qat_path, make_quantized_path
@@ -30,6 +30,8 @@ class Config:
     scale_learning_rate: float = 0.0
     lr_schedule: Literal["constant", "cosine"] = "constant"
     num_epochs: int = 1
+    dataset: Literal["math500", "mmlu_redux"] = "math500"
+    num_per_subject: int = 40
     seed: int = 0
     chunk_len: int = 2048
 
@@ -46,20 +48,25 @@ def get_think_hiddens(
 def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
+    entry_name = "teacher_forcing" if config.dataset == "math500" else f"teacher_forcing_{config.dataset}"
     if config.method == "qat":
         quantized_path = make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs)
     else:
         quantized_path = make_quantized_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
-    if result_exists("teacher_forcing", quantized_path, file_name, "safetensors"):
+    if result_exists(entry_name, quantized_path, file_name, "safetensors"):
         print(f"{quantized_path} already computed")
         return
     bf16_model, tokenizer = load_model(config.model_name, config.model_name)
     model, _ = load_model(download_model(quantized_path), config.model_name)
-    result = load_result("math500", f"bf16/{config.model_name}", file_name)
+    if config.dataset == "math500":
+        prompts = [prompt for prompt, _ in load_math500()]
+    else:
+        prompts = [prompt for prompt, _ in load_mmlu_redux(config.num_per_subject, config.seed)]
+    result = load_result(config.dataset, f"bf16/{config.model_name}", file_name)
 
     # use only bf16 reasoning on problems which it answers correctly
     samples = []
-    for (prompt, _), think, correct in zip(load_math500(), result["thinks"], result["corrects"]):
+    for prompt, think, correct in zip(prompts, result["thinks"], result["corrects"]):
         if correct:
             prompt_ids = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], add_generation_prompt=True, enable_thinking=True, return_tensors="pt")["input_ids"][0]
             think_ids = tokenizer(think, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
@@ -95,7 +102,7 @@ def main() -> None:
 
     tensors = {name: torch.cat(values) for name, values in tensors.items()}
     print(f"{quantized_path} entropy {tensors['entropy'].mean():.4f} kl {tensors['kl'].mean():.4f} top1 mismatch {(tensors['bf16_top1'] != tensors['top1']).float().mean():.2%}")
-    save_tensors("teacher_forcing", quantized_path, file_name, tensors)
+    save_tensors(entry_name, quantized_path, file_name, tensors)
 
 
 if __name__ == "__main__":
