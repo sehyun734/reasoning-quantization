@@ -1,4 +1,4 @@
-from datasets import load_dataset
+from datasets import get_dataset_config_names, load_dataset
 from safetensors.torch import load_file, save
 import torch
 from torch import Tensor
@@ -8,6 +8,13 @@ from primitives.hub import download_file, upload_file
 MATH_PROMPT = """\
 {problem}
 Please reason step by step, and put your final answer within \\boxed{{}}."""
+
+MMLU_PROMPT = """\
+{question}
+{choices}
+Please reason step by step, and put your final answer (A, B, C, or D) within \\boxed{{}}."""
+
+MMLU_MATH_SUBJECTS = {"abstract_algebra", "college_mathematics", "elementary_mathematics", "high_school_mathematics", "high_school_statistics"}
 
 
 def load_numina_prompts(
@@ -45,3 +52,19 @@ def load_numina(
 def load_math500() -> list[tuple[str, str]]:
     dataset = load_dataset("HuggingFaceH4/MATH-500", split="test")
     return [(MATH_PROMPT.format(problem=row["problem"]), row["answer"]) for row in dataset]
+
+
+def load_mmlu_redux(
+    num_per_subject: int,
+    seed: int,
+) -> list[tuple[str, str]]:
+    samples = []
+    for subject in get_dataset_config_names("edinburgh-dawg/mmlu-redux-2.0"):
+        # skip math subjects (already covered by math500)
+        if subject in MMLU_MATH_SUBJECTS:
+            continue
+        dataset = load_dataset("edinburgh-dawg/mmlu-redux-2.0", subject, split="test").filter(lambda row: row["error_type"] == "ok").shuffle(seed=seed)
+        for row in dataset.select(range(num_per_subject)):
+            choices = "\n".join(f"{letter}. {choice}" for letter, choice in zip("ABCD", row["choices"]))
+            samples.append((MMLU_PROMPT.format(question=row["question"], choices=choices), "ABCD"[row["answer"]]))
+    return samples
