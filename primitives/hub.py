@@ -52,7 +52,7 @@ def load_grid(
 def download_model(
     path: str,
 ) -> str:
-    return str(Path(snapshot_download(get_repo_name(), allow_patterns=[f"{path}/*"])) / path)
+    return str(Path(snapshot_download(get_repo_name(), allow_patterns=[f"{path}/*.json", f"{path}/model*.safetensors"])) / path)
 
 
 def result_exists(
