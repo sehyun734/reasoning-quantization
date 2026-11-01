@@ -37,6 +37,13 @@ def make_target_path(
     return make_quantized_path(method, model_name, num_bits, group_size, num_samples)
 
 
+def make_qat_path(
+    quantized_path: str,
+    hidden_weight: float,
+) -> str:
+    return f"qat/{quantized_path}/hidden_weight={hidden_weight}"
+
+
 def make_routing_path(
     quantized_path: str,
     route_ratio: float,
