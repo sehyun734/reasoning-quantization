@@ -12,7 +12,7 @@ SCHEDULE_VARIANTS = {
 
 
 def main() -> None:
-    plot_qat(parse(Config), SCHEDULE_VARIANTS, "qat_schedule")
+    plot_qat(parse(Config), {}, SCHEDULE_VARIANTS, "qat_schedule")
 
 
 if __name__ == "__main__":
