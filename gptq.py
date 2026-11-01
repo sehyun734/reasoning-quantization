@@ -8,7 +8,7 @@ from torch.nn import Linear, Module
 
 from primitives.capture import capture_layer_inputs
 from primitives.dataset import load_numina
-from primitives.hub import save_quantized
+from primitives.hub import save_grid, save_quantized
 from primitives.model import load_model
 from primitives.paths import make_numina_path, make_quantized_path
 from primitives.quantization import find_grid, round_to_grid
@@ -56,7 +56,7 @@ def quantize_weight(
     group_size: int,
     block_size: int,
     damp_ratio: float,
-) -> Tensor:
+) -> tuple[Tensor, Tensor, Tensor]:
     weight = weight.float().clone()
     # zero-input columns make hessian non-invertible, so zero weight and set diagonal to 1
     is_dead = hessian.diagonal() == 0
@@ -85,31 +85,37 @@ def quantize_weight(
             weight[:, column:end] -= torch.outer(error[:, column - start], hessian_inv[column, column:end])
         # push whole block's error to columns after block at once
         weight[:, end:] -= error[:, : end - start] @ hessian_inv[start:end, end:]
-    return quantized
+    return quantized, scale, zero
 
 
 @torch.no_grad()
 def main() -> None:
     config = parse(Config)
+    quantized_path = make_quantized_path("gptq", config.model_name, config.num_bits, config.group_size, config.num_samples)
     model, _ = load_model(config.model_name, config.model_name)
     samples = load_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed))
     layers = model.model.layers
+    grid = {}
 
     log_time = time.perf_counter()
     torch.cuda.reset_peak_memory_stats()
     for layer_index, layer in enumerate(layers):
         inputs = capture_layer_inputs(model, layer, samples)
-        for linear in layer.modules():
+        for name, linear in layer.named_modules():
             if not isinstance(linear, Linear):
                 continue
             hessian = compute_hessian(layer, linear, inputs)
-            linear.weight.copy_(quantize_weight(linear.weight, hessian, config.num_bits, config.group_size, config.block_size, config.damp_ratio))
+            quantized, scale, zero = quantize_weight(linear.weight, hessian, config.num_bits, config.group_size, config.block_size, config.damp_ratio)
+            linear.weight.copy_(quantized)
+            grid[f"{layer_index}.{name}.scale"] = scale.cpu()
+            grid[f"{layer_index}.{name}.zero"] = zero.cpu()
 
         print(f"layer {layer_index + 1}/{len(layers)} time {format_duration(time.perf_counter() - log_time)} memory {format_memory(torch.cuda.max_memory_allocated())}")
         log_time = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
 
-    save_quantized(make_quantized_path("gptq", config.model_name, config.num_bits, config.group_size, config.num_samples), model)
+    save_quantized(quantized_path, model)
+    save_grid(quantized_path, grid)
 
 
 if __name__ == "__main__":

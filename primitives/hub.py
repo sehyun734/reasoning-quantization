@@ -36,6 +36,19 @@ def save_quantized(
     print(f"saved {path}")
 
 
+def save_grid(
+    path: str,
+    grid: dict[str, Tensor],
+) -> None:
+    upload_file(f"{path}/grid.safetensors", save(grid))
+
+
+def load_grid(
+    path: str,
+) -> dict[str, Tensor]:
+    return load_file(download_file(f"{path}/grid.safetensors"))
+
+
 def download_model(
     path: str,
 ) -> str:
