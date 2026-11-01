@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 from simple_parsing import parse
 
+from primitives.dataset import load_math500
 from primitives.hub import load_result, result_exists
 from primitives.paths import make_target_path
-from primitives.plot import METHOD_COLORS, fit_bar_width, get_length_ratio, get_loop_ratio, get_figsize, get_panel_width, plot_bars, save_figure
+from primitives.plot import METHOD_COLORS, fit_bar_width, get_intermediate_answer_ratio, get_length_ratio, get_loop_ratio, get_figsize, get_panel_width, plot_bars, save_figure
 
 
 @dataclass
@@ -29,18 +30,21 @@ def main() -> None:
             results[method] = load_result("math500", target, file_name)
     methods = list(results)
     bf16_result = results["bf16"]
+    answers = [answer for _, answer in load_math500()]
 
-    accuracies, truncateds, ratios, loops = [], [], [], []
+    accuracies, truncateds, ratios, loops, intermediates = [], [], [], [], []
     for method in methods:
         result = results[method]
         accuracies.append(result["accuracy"])
         truncateds.append(mean(result["truncateds"]))
         ratios.append(get_length_ratio(result, bf16_result))
         loops.append(get_loop_ratio(result))
+        intermediates.append(get_intermediate_answer_ratio(result, answers))
     panels = [
         ("accuracy", accuracies, [f"{accuracy:.1%}\ntruncated {truncated:.1%}" for accuracy, truncated in zip(accuracies, truncateds)]),
         ("median reasoning tokens / bf16, both correct", ratios, [f"{ratio:.2f}x" for ratio in ratios]),
         ("looped reasoning ratio", loops, [f"{loop:.1%}" for loop in loops]),
+        ("wrong answers that reach correct answer while reasoning", intermediates, [f"{intermediate:.1%}" for intermediate in intermediates]),
     ]
 
     panel_widths = [get_panel_width(len(methods), 1)] * len(panels)
@@ -50,7 +54,7 @@ def main() -> None:
         ax.set_ylabel(ylabel)
         ax.margins(y=0.2)
         ax.set_ylim(bottom=0)
-    for ax in [axes[0], axes[2]]:
+    for ax in [axes[0], axes[2], axes[3]]:
         ax.yaxis.set_major_formatter(PercentFormatter(1))
     fig.suptitle(f"{config.model_name} math500 {file_name}")
     fit_bar_width(fig, axes)
