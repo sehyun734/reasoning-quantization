@@ -44,7 +44,7 @@ def main() -> None:
         ("accuracy", accuracies, [f"{accuracy:.1%}\ntruncated {truncated:.1%}" for accuracy, truncated in zip(accuracies, truncateds)]),
         ("median reasoning tokens / bf16, both correct", ratios, [f"{ratio:.2f}x" for ratio in ratios]),
         ("looped reasoning ratio", loops, [f"{loop:.1%}" for loop in loops]),
-        ("wrong answers that reach correct answer while reasoning", intermediates, [f"{intermediate:.1%}" for intermediate in intermediates]),
+        ("wrong answers reaching correct answer midway", intermediates, [f"{intermediate:.1%}" for intermediate in intermediates]),
     ]
 
     panel_widths = [get_panel_width(len(methods), 1)] * len(panels)

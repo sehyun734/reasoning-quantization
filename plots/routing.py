@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from simple_parsing import parse
 
+from primitives.dataset import load_math500
 from primitives.hub import load_result, result_exists
 from primitives.paths import make_quantized_path, make_routing_path, make_target_path
-from primitives.plot import METHOD_COLORS, fit_bar_width, get_figsize, get_length_ratio, get_loop_ratio, get_panel_width, plot_bars, save_figure
+from primitives.plot import METHOD_COLORS, fit_bar_width, get_figsize, get_intermediate_answer_ratio, get_length_ratio, get_loop_ratio, get_panel_width, plot_bars, save_figure
 
 ROUTE_COLORS = {"high": "tab:red", "low": "tab:blue", "random": "tab:purple"}
 ROUTE_LABELS = {"high": "high entropy", "low": "low entropy", "random": "random"}
@@ -40,10 +41,12 @@ def main() -> None:
                 route_results[route].append(load_result("math500", target, file_name) if result_exists("math500", target, file_name) else None)
         if any(any(ratio_results) for ratio_results in route_results.values()):
             results[method] = (load_result("math500", quantized_path, file_name), route_results)
+    answers = [answer for _, answer in load_math500()]
     panels = [
         ("accuracy", lambda result: result["accuracy"], "{x:.1%}"),
         ("median reasoning tokens / bf16, both correct", lambda result: get_length_ratio(result, bf16_result), "{x:.2f}x"),
         ("looped reasoning ratio", get_loop_ratio, "{x:.1%}"),
+        ("wrong answers reaching correct answer midway", lambda result: get_intermediate_answer_ratio(result, answers), "{x:.1%}"),
     ]
 
     panel_widths = [get_panel_width(len(ROUTE_RATIOS), len(ROUTE_COLORS))] * len(panels)
