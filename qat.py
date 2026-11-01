@@ -32,6 +32,8 @@ class Config:
     # cut prompt + reasoning to this length
     max_sequence_len: int = 8192
     hidden_weight: float = 1.0
+    on_policy: bool = False
+    scale_learning_rate: float = 0.0
     learning_rate: float = 1e-4
     batch_size: int = 8
     seed: int = 0
@@ -65,7 +67,7 @@ class STELinear(Module):
         self,
         x: Tensor,
     ) -> Tensor:
-        return linear(x, self.weight + (self.quantize() - self.weight).detach(), self.bias)
+        return linear(x, self.quantize(), self.bias)
 
 
 def main() -> None:
@@ -75,7 +77,11 @@ def main() -> None:
     bf16_model, _ = load_model(config.model_name, config.model_name)
     model, _ = load_model(download_model(quantized_path), config.model_name)
     model.float()
-    samples = [input_ids[: config.max_sequence_len] for input_ids in load_numina(make_numina_path(config.model_name, config.qat_num_samples, config.max_generation_len, config.seed))]
+    if config.on_policy:
+        numina_path = make_numina_path(quantized_path, config.qat_num_samples, config.max_generation_len, config.seed)
+    else:
+        numina_path = make_numina_path(config.model_name, config.qat_num_samples, config.max_generation_len, config.seed)
+    samples = [input_ids[: config.max_sequence_len] for input_ids in load_numina(numina_path)]
 
     grid = load_grid(quantized_path)
     linears = [(name, module) for name, module in model.model.layers.named_modules() if isinstance(module, Linear)]
@@ -84,14 +90,18 @@ def main() -> None:
     for name, module in linears:
         ste_linear = STELinear(module, grid[f"{name}.scale"].to(model.device), grid[f"{name}.zero"].to(model.device), config.num_bits, config.group_size)
         ste_linear.weight.requires_grad_(True)
+        ste_linear.scale.requires_grad_(config.scale_learning_rate > 0)
         parent_name, child_name = name.rsplit(".", 1)
         setattr(model.model.layers.get_submodule(parent_name), child_name, ste_linear)
         ste_linears.append(ste_linear)
-    optimizer = AdamW([ste_linear.weight for ste_linear in ste_linears], lr=config.learning_rate, weight_decay=0)
+    parameters = [{"params": [ste_linear.weight for ste_linear in ste_linears], "lr": config.learning_rate}]
+    if config.scale_learning_rate > 0:
+        parameters.append({"params": [ste_linear.scale for ste_linear in ste_linears], "lr": config.scale_learning_rate})
+    optimizer = AdamW(parameters, weight_decay=0)
 
     num_batches = math.ceil(len(samples) / config.batch_size)
     kls = []
-    hidden_errors = []
+    hidden_losses = []
     random.shuffle(samples)
     log_time = time.perf_counter()
     torch.cuda.reset_peak_memory_stats()
@@ -99,7 +109,7 @@ def main() -> None:
         batch = samples[start : start + config.batch_size]
         num_positions = sum(len(input_ids) - 1 for input_ids in batch)
         batch_kl = 0.0
-        batch_hidden_error = 0.0
+        batch_hidden_loss = 0.0
 
         for input_ids in batch:
             input_ids = input_ids[None].to(model.device)
@@ -116,20 +126,20 @@ def main() -> None:
             # kl to bf16 distribution
             kl = -entropy - (bf16_probs * logprobs).sum(dim=-1)
             # hidden error to bf16 weighted by entropy (higher entropy, more weight)
-            hidden_error = entropy * ((hiddens.float() - bf16_hiddens) ** 2).sum(dim=-1) / (bf16_hiddens**2).sum(dim=-1)
-            loss = (kl.sum() + config.hidden_weight * hidden_error.sum()) / num_positions
+            hidden_loss = entropy * ((hiddens.float() - bf16_hiddens) ** 2).sum(dim=-1) / (bf16_hiddens**2).sum(dim=-1)
+            loss = (kl.sum() + config.hidden_weight * hidden_loss.sum()) / num_positions
             loss.backward()
             batch_kl += kl.sum().item() / num_positions
-            batch_hidden_error += hidden_error.sum().item() / num_positions
+            batch_hidden_loss += hidden_loss.sum().item() / num_positions
 
         optimizer.step()
         optimizer.zero_grad()
         kls.append(batch_kl)
-        hidden_errors.append(batch_hidden_error)
+        hidden_losses.append(batch_hidden_loss)
         if (step + 1) % 16 == 0:
-            print(f"batch {step + 1}/{num_batches} kl {mean(kls):.4f} hidden_error {mean(hidden_errors):.4f} time {format_duration(time.perf_counter() - log_time)} memory {format_memory(torch.cuda.max_memory_allocated())}")
+            print(f"batch {step + 1}/{num_batches} kl {mean(kls):.4f} hidden_loss {mean(hidden_losses):.4f} time {format_duration(time.perf_counter() - log_time)} memory {format_memory(torch.cuda.max_memory_allocated())}")
             kls = []
-            hidden_errors = []
+            hidden_losses = []
             log_time = time.perf_counter()
             torch.cuda.reset_peak_memory_stats()
 
@@ -139,7 +149,7 @@ def main() -> None:
             parent_name, child_name = name.rsplit(".", 1)
             setattr(model.model.layers.get_submodule(parent_name), child_name, module)
     model.to(torch.bfloat16)
-    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight), model)
+    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight, config.on_policy, config.scale_learning_rate), model)
 
 
 if __name__ == "__main__":

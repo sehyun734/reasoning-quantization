@@ -20,7 +20,9 @@ class Config:
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
-    hidden_weight: float = 1.0
+    hidden_weight: float = 0.0
+    on_policy: bool = False
+    scale_learning_rate: float = 0.0
     max_generation_len: int = 32768
     seed: int = 0
 
@@ -29,7 +31,7 @@ def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
     if config.method == "qat":
-        target = make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight)
+        target = make_qat_path(config.model_name, config.num_bits, config.group_size, config.hidden_weight, config.on_policy, config.scale_learning_rate)
     else:
         target = make_target_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists("math500", target, file_name):

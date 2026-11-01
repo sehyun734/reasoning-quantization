@@ -1,10 +1,10 @@
 def make_numina_path(
-    model_name: str,
+    target: str,
     num_samples: int,
     max_generation_len: int,
     seed: int,
 ) -> str:
-    return f"numina/{model_name}/num_samples={num_samples},max_generation_len={max_generation_len},seed={seed}"
+    return f"numina/{target}/num_samples={num_samples},max_generation_len={max_generation_len},seed={seed}"
 
 
 def make_mxfp4_path(
@@ -42,8 +42,10 @@ def make_qat_path(
     num_bits: int,
     group_size: int,
     hidden_weight: float,
+    on_policy: bool,
+    scale_learning_rate: float,
 ) -> str:
-    return f"qat/{model_name}/num_bits={num_bits},group_size={group_size},hidden_weight={hidden_weight}"
+    return f"qat/{model_name}/num_bits={num_bits},group_size={group_size},hidden_weight={hidden_weight},on_policy={on_policy},scale_learning_rate={scale_learning_rate}"
 
 
 def make_routing_path(
