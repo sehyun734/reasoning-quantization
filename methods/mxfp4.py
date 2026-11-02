@@ -7,7 +7,7 @@ from torch import Tensor
 from torch.nn import Linear
 
 from utils.format import format_duration, format_memory
-from utils.hub import save_quantized
+from utils.hub import save_model
 from utils.model import load_model
 from utils.paths import make_mxfp4_path
 
@@ -26,7 +26,7 @@ def find_scale(
     return 2 ** (torch.floor(torch.log2(weight_max)) - 2)
 
 
-def round_to_grid(
+def round_to_fp4(
     weight: Tensor,
     scale: Tensor,
 ) -> Tensor:
@@ -39,7 +39,7 @@ def quantize_weight(
     weight: Tensor,
 ) -> Tensor:
     groups = weight.float().reshape(weight.shape[0], -1, GROUP_SIZE)
-    return round_to_grid(groups, find_scale(groups)[..., None]).reshape(weight.shape)
+    return round_to_fp4(groups, find_scale(groups)[..., None]).reshape(weight.shape)
 
 
 @torch.no_grad()
@@ -60,7 +60,7 @@ def main() -> None:
         log_time = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
 
-    save_quantized(make_mxfp4_path(config.model_name), model)
+    save_model(make_mxfp4_path(config.model_name), model)
 
 
 if __name__ == "__main__":

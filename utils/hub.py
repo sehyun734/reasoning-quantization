@@ -26,7 +26,7 @@ def download_file(
     return hf_hub_download(get_repo_name(), path)
 
 
-def save_quantized(
+def save_model(
     path: str,
     model: PreTrainedModel,
 ) -> None:

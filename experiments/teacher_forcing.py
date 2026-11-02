@@ -75,7 +75,7 @@ def main() -> None:
     tensors = defaultdict(list)
     log_time = time.perf_counter()
     torch.cuda.reset_peak_memory_stats()
-    for step, (prompt_ids, think_ids) in enumerate(samples):
+    for sample_index, (prompt_ids, think_ids) in enumerate(samples):
         input_ids = torch.cat([prompt_ids, think_ids])
         bf16_hiddens = get_think_hiddens(bf16_model, input_ids, len(prompt_ids))
         quantized_hiddens = get_think_hiddens(quantized_model, input_ids, len(prompt_ids))
@@ -100,8 +100,8 @@ def main() -> None:
             tensors["logit_std_error"].append((quantized_logits - bf16_logits).gather(-1, bf16_logits.topk(TOP_K, dim=-1).indices).std(dim=-1).cpu())
         tensors["think_ids"].append(think_ids)
 
-        if (step + 1) % 50 == 0:
-            print(f"sample {step + 1}/{len(samples)} time {format_duration(time.perf_counter() - log_time)} memory {format_memory(torch.cuda.max_memory_allocated())}")
+        if (sample_index + 1) % 50 == 0:
+            print(f"sample {sample_index + 1}/{len(samples)} time {format_duration(time.perf_counter() - log_time)} memory {format_memory(torch.cuda.max_memory_allocated())}")
             log_time = time.perf_counter()
             torch.cuda.reset_peak_memory_stats()
 

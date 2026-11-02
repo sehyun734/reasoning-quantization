@@ -9,7 +9,7 @@ from torch.nn import Linear, Module
 from utils.capture import capture_layer_inputs
 from utils.dataset import load_numina
 from utils.format import format_duration, format_memory
-from utils.hub import save_grid, save_quantized
+from utils.hub import save_grid, save_model
 from utils.model import load_model
 from utils.paths import make_numina_path, make_quantized_path
 from utils.quantization import find_grid, round_to_grid
@@ -114,7 +114,7 @@ def main() -> None:
         log_time = time.perf_counter()
         torch.cuda.reset_peak_memory_stats()
 
-    save_quantized(quantized_path, model)
+    save_model(quantized_path, model)
     save_grid(quantized_path, grid)
 
 

@@ -44,15 +44,15 @@ def main() -> None:
         groups = {"both correct": ([], []), f"{method} wrong": ([], [])}
         for think, think_len, correct, truncated, bf16_think, bf16_think_len, bf16_correct in zip(result["thinks"], result["think_lens"], result["corrects"], result["truncateds"], bf16_result["thinks"], bf16_result["think_lens"], bf16_result["corrects"]):
             if bf16_correct and not truncated:
-                quantized_word_rates, bf16_word_rates = groups["both correct" if correct else f"{method} wrong"]
-                quantized_word_rates.append(count_word_rates(think, think_len))
+                bf16_word_rates, quantized_word_rates = groups["both correct" if correct else f"{method} wrong"]
                 bf16_word_rates.append(count_word_rates(bf16_think, bf16_think_len))
+                quantized_word_rates.append(count_word_rates(think, think_len))
 
         fig = plt.figure(figsize=get_words_figsize(config.num_words, len(groups)), layout="constrained")
-        for subfig, (group, (quantized_word_rates, bf16_word_rates)) in zip(fig.subfigures(len(groups), 1, squeeze=False)[:, 0], groups.items()):
-            words = set().union(*quantized_word_rates, *bf16_word_rates)
-            quantized_mean_rates = {word: mean(rates.get(word, 0) for rates in quantized_word_rates) for word in words}
+        for subfig, (group, (bf16_word_rates, quantized_word_rates)) in zip(fig.subfigures(len(groups), 1, squeeze=False)[:, 0], groups.items()):
+            words = set().union(*bf16_word_rates, *quantized_word_rates)
             bf16_mean_rates = {word: mean(rates.get(word, 0) for rates in bf16_word_rates) for word in words}
+            quantized_mean_rates = {word: mean(rates.get(word, 0) for rates in quantized_word_rates) for word in words}
             plot_words(subfig, bf16_mean_rates, quantized_mean_rates, method, config.num_words, f"{len(quantized_word_rates)} {group} problems", "mean count per 1k reasoning tokens")
 
         handles = [Patch(color=METHOD_COLORS[name], label=name) for name in ["bf16", method]]

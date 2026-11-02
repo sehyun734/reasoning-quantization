@@ -33,15 +33,15 @@ def main() -> None:
     if result_exists("mmlu_redux", target, file_name):
         print(f"{target} already evaluated")
         return
-    samples = load_mmlu_redux(config.num_per_subject)
+    problems = load_mmlu_redux(config.num_per_subject)
 
     model_path = config.model_name if config.method == "bf16" else download_model(target)
     model = load_vllm(model_path, config.model_name, config.seed)
     tokenizer = model.get_tokenizer()
 
     log_time = time.perf_counter()
-    outputs = generate_vllm(model, [prompt for prompt, _ in samples], config.max_generation_len)
-    result = evaluate_mmlu_redux(outputs, [answer for _, answer in samples], tokenizer)
+    outputs = generate_vllm(model, [prompt for prompt, _ in problems], config.max_generation_len)
+    result = evaluate_mmlu_redux(outputs, [answer for _, answer in problems], tokenizer)
     print(f"{target} accuracy {result['accuracy']:.2%} think_len {mean(result['think_lens']):.0f} truncated {mean(result['truncateds']):.2%} time {format_duration(time.perf_counter() - log_time)}")
     save_result("mmlu_redux", target, file_name, result)
 
