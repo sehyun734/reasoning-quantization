@@ -88,7 +88,7 @@ def main() -> None:
     samples = load_math500()
 
     model_path = config.model_name if config.method == "bf16" else download_model(model_target)
-    model = load_vllm(model_path, config.model_name)
+    model = load_vllm(model_path, config.model_name, config.seed)
     tokenizer = model.get_tokenizer()
     think_end_id = tokenizer.convert_tokens_to_ids(THINK_END)
     logit_bias = {}
@@ -98,7 +98,7 @@ def main() -> None:
     print(f"penalized tokens {len(logit_bias)}")
 
     log_time = time.perf_counter()
-    outputs = generate_vllm(model, [prompt for prompt, _ in samples], config.max_generation_len, config.seed, logit_bias)
+    outputs = generate_vllm(model, [prompt for prompt, _ in samples], config.max_generation_len, logit_bias)
     result = evaluate_math500(outputs, [answer for _, answer in samples], tokenizer, think_end_id)
     print(f"{target} accuracy {result['accuracy']:.2%} think_len {mean(result['think_lens']):.0f} truncated {mean(result['truncateds']):.2%} time {format_duration(time.perf_counter() - log_time)}")
     save_result("math500", target, file_name, result)

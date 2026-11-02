@@ -196,12 +196,12 @@ def main() -> None:
     with TemporaryDirectory() as directory:
         merge(snapshot_download(config.model_name, allow_patterns=["*.json", "*.safetensors"]), download_model(quantized_path), directory)
         # load merged model from directory with vllm
-        model = load_vllm(directory, config.model_name, hf_overrides=hf_overrides)
+        model = load_vllm(directory, config.model_name, config.seed, hf_overrides=hf_overrides)
     tokenizer = model.get_tokenizer()
     think_end_id = tokenizer.convert_tokens_to_ids(THINK_END)
 
     log_time = time.perf_counter()
-    outputs = generate_vllm(model, [prompt for prompt, _ in samples], config.max_generation_len, config.seed)
+    outputs = generate_vllm(model, [prompt for prompt, _ in samples], config.max_generation_len)
     result = evaluate_math500(outputs, [answer for _, answer in samples], tokenizer, think_end_id)
     print(f"{target} accuracy {result['accuracy']:.2%} think_len {mean(result['think_lens']):.0f} truncated {mean(result['truncateds']):.2%} time {format_duration(time.perf_counter() - log_time)}")
     save_result("math500", target, file_name, result)

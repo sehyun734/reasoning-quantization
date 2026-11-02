@@ -22,12 +22,12 @@ class Config:
 def main() -> None:
     config = parse(Config)
     prompts = load_numina_prompts(config.num_samples, config.seed)
-    model = load_vllm(config.model_name, config.model_name)
+    model = load_vllm(config.model_name, config.model_name, config.seed)
     tokenizer = model.get_tokenizer()
 
     # generate reasoning with bf16 model
     log_time = time.perf_counter()
-    outputs = generate_vllm(model, prompts, config.max_generation_len, config.seed)
+    outputs = generate_vllm(model, prompts, config.max_generation_len)
     print(f"generated {len(outputs)} output_len {mean(len(output.token_ids) for output in outputs):.0f} time {format_duration(time.perf_counter() - log_time)}")
 
     # save prompt + reasoning as calibration and qat data
