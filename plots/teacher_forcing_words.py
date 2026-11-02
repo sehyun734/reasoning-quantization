@@ -44,6 +44,7 @@ def main() -> None:
 
         fig = plt.figure(figsize=get_words_figsize(config.num_words, 1), layout="constrained")
         plot_words(fig.subfigures(1, 1), bf16_rates, quantized_rates, method, config.num_words, f"{num_high_entropy} high entropy positions", "top-1 count per 1k high entropy positions")
+
         handles = [Patch(color=METHOD_COLORS[name], label=name) for name in ["bf16", method]]
         fig.suptitle(f"{config.model_name} math500 teacher forcing words {method} {file_name}, high_entropy_ratio={config.high_entropy_ratio:g}")
         fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))

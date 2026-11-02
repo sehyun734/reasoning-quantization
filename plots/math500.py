@@ -57,6 +57,7 @@ def main() -> None:
         ax.set_ylim(bottom=0)
     for ax in [axes[0], axes[2], axes[3]]:
         ax.yaxis.set_major_formatter(PercentFormatter(1))
+
     fig.suptitle(f"{config.model_name} math500 {file_name}")
     fit_bar_width(fig, axes)
     save_figure(fig, config.model_name, "math500")
