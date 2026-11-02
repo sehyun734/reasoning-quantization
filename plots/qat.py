@@ -9,15 +9,20 @@ from simple_parsing import parse
 from primitives.dataset import load_math500
 from primitives.hub import load_result, load_tensors
 from primitives.paths import make_penalty_path, make_qat_path, make_target_path
-from primitives.plot import ENTROPY_COLORS, METHOD_COLORS, PANEL_MARGIN, fit_bar_width, get_figsize, get_intermediate_answer_ratio, get_length_ratio, get_loop_ratio, get_panel_width, plot_bars, save_figure
+from primitives.plot import ENTROPY_COLORS, METHOD_COLORS, fit_bar_width, get_figsize, get_intermediate_answer_ratio, get_length_ratio, get_loop_ratio, get_panel_width, plot_bars, save_figure
 
 QAT_VARIANTS = {
-    "qat\nkl only": (2048, "kl", 0.0, False, 0.0, "constant", 1, 0.0, "tab:pink"),
-    "qat\nhigh entropy x3": (2048, "kl", 0.0, False, 0.0, "constant", 1, 2.0, "slateblue"),
-    "qat\n+ hidden loss": (2048, "kl", 1.0, False, 0.0, "constant", 1, 0.0, "tab:olive"),
-    "qat\non-policy": (2048, "kl", 0.0, True, 0.0, "constant", 1, 0.0, "tab:cyan"),
-    "qat\nlsq 1e-6": (2048, "kl", 0.0, False, 1e-06, "constant", 1, 0.0, "gold"),
-    "qat\nlsq 1e-5": (2048, "kl", 0.0, False, 1e-05, "constant", 1, 0.0, "darkgoldenrod"),
+    "kl\nconstant\n1 epoch": (2048, "kl", 0.0, False, 0.0, "constant", 1, 0.0, "darkmagenta"),
+    "kl\ncosine\n1 epoch": (2048, "kl", 0.0, False, 0.0, "cosine", 1, 0.0, "darkmagenta"),
+    "kl\ncosine\n3 epochs": (2048, "kl", 0.0, False, 0.0, "cosine", 3, 0.0, "darkmagenta"),
+    "high entropy\nx3\nconstant\n1 epoch": (2048, "kl", 0.0, False, 0.0, "constant", 1, 2.0, "slateblue"),
+    "high entropy\nx3\ncosine\n3 epochs": (2048, "kl", 0.0, False, 0.0, "cosine", 3, 2.0, "slateblue"),
+    "on-policy\nconstant\n1 epoch": (2048, "kl", 0.0, True, 0.0, "constant", 1, 0.0, "tab:cyan"),
+    "lsq 1e-6\nconstant\n1 epoch": (2048, "kl", 0.0, False, 1e-06, "constant", 1, 0.0, "gold"),
+    "lsq 1e-5\nconstant\n1 epoch": (2048, "kl", 0.0, False, 1e-05, "constant", 1, 0.0, "gold"),
+    "+ hidden loss\nconstant\n1 epoch": (2048, "kl", 1.0, False, 0.0, "constant", 1, 0.0, "tab:olive"),
+    "+ hidden loss\ncosine\n3 epochs": (2048, "kl", 1.0, False, 0.0, "cosine", 3, 0.0, "tab:olive"),
+    "+ hidden loss\ncosine\n5 epochs": (2048, "kl", 1.0, False, 0.0, "cosine", 5, 0.0, "tab:olive"),
 }
 
 
@@ -71,14 +76,17 @@ def plot_qat(
         kl_groups["low entropy"].append(tensors["kl"][~is_high].mean().item())
         kl_groups["high entropy"].append(tensors["kl"][is_high].mean().item())
 
-    top_widths = [get_panel_width(len(labels), 1)] * 3
-    bottom_widths = [get_panel_width(len(labels), 1), get_panel_width(len(kl_labels), len(ENTROPY_COLORS))]
-    fig = plt.figure(figsize=get_figsize(top_widths, 2), layout="constrained")
-    top, bottom = fig.subfigures(2, 1)
-    bottom_ratios = [width + PANEL_MARGIN for width in bottom_widths]
-    bottom_axes = bottom.subplots(1, len(bottom_widths) + 1, width_ratios=[*bottom_ratios, sum(top_widths) + PANEL_MARGIN * len(top_widths) - sum(bottom_ratios)])
-    bottom_axes[-1].axis("off")
-    axes = [*top.subplots(1, len(top_widths), width_ratios=top_widths), *bottom_axes[:-1]]
+    widths = [get_panel_width(len(labels), 1)] * len(panels) + [get_panel_width(len(kl_labels), len(ENTROPY_COLORS))]
+    max_width = max(widths)
+    fig = plt.figure(figsize=get_figsize([max_width], len(widths)), layout="constrained")
+    axes = []
+    for subfig, width in zip(fig.subfigures(len(widths), 1), widths):
+        if width == max_width:
+            axes.append(subfig.subplots())
+        else:
+            ax, spacer = subfig.subplots(1, 2, width_ratios=[width, max_width - width])
+            spacer.axis("off")
+            axes.append(ax)
     for ax, (ylabel, values, texts) in zip(axes, panels):
         plot_bars(ax, labels, [(values, colors, texts)])
         ax.set_ylabel(ylabel)
@@ -91,7 +99,7 @@ def plot_qat(
         ax.yaxis.set_major_formatter(PercentFormatter(1))
     fig.suptitle(f"{config.model_name} math500 {name} {file_name}, high_entropy_ratio={config.high_entropy_ratio:g}")
     fig.legend(handles=[Patch(color=color, label=group) for group, color in ENTROPY_COLORS.items()], loc="outside lower center", ncol=len(ENTROPY_COLORS))
-    fit_bar_width(fig, axes[:len(top_widths)])
+    fit_bar_width(fig, [axes[widths.index(max_width)]])
     save_figure(fig, config.model_name, name)
 
 
