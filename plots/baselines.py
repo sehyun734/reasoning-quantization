@@ -7,10 +7,10 @@ PENALTIES = {
     "gptq\n+ penalty 2.0": (2.0, "chocolate"),
 }
 LOSS_VARIANTS = {
-    "qat\nkl": (2048, "kl", 0.0, False, 0.0, "cosine", 3, "darkmagenta"),
-    "qat\nce": (2048, "ce", 0.0, False, 0.0, "cosine", 3, "teal"),
-    "qat\ncakld": (2048, "cakld", 0.0, False, 0.0, "cosine", 3, "darkkhaki"),
-    "qat\n+ hidden loss": (2048, "kl", 1.0, False, 0.0, "cosine", 3, "tab:olive"),
+    "qat\nkl": (2048, "kl", 0.0, False, 0.0, "cosine", 3, 0.0, "darkmagenta"),
+    "qat\nce": (2048, "ce", 0.0, False, 0.0, "cosine", 3, 0.0, "teal"),
+    "qat\ncakld": (2048, "cakld", 0.0, False, 0.0, "cosine", 3, 0.0, "darkkhaki"),
+    "qat\n+ hidden loss": (2048, "kl", 1.0, False, 0.0, "cosine", 3, 0.0, "tab:olive"),
 }
 
 

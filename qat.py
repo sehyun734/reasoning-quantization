@@ -35,6 +35,7 @@ class Config:
     num_train_samples: int = 2048
     loss: Literal["kl", "ce", "cakld"] = "kl"
     hidden_weight: float = 0.0
+    high_entropy_weight: float = 0.0
     on_policy: bool = False
     scale_learning_rate: float = 0.0
     lr: float = 1e-4
@@ -84,7 +85,7 @@ def get_kl_by_entropy(
     bf16_model: PreTrainedModel,
     samples: list[Tensor],
     high_entropy_ratio: float,
-) -> tuple[float, float]:
+) -> tuple[float, float, float]:
     entropies = []
     kls = []
     for input_ids in samples:
@@ -97,8 +98,9 @@ def get_kl_by_entropy(
         kls.append((bf16_probs * (bf16_logprobs - logprobs)).sum(dim=-1).cpu())
     entropy = torch.cat(entropies)
     kl = torch.cat(kls)
-    is_high = entropy > entropy.quantile(1 - high_entropy_ratio)
-    return kl[~is_high].mean().item(), kl[is_high].mean().item()
+    threshold = entropy.quantile(1 - high_entropy_ratio)
+    is_high = entropy > threshold
+    return kl[~is_high].mean().item(), kl[is_high].mean().item(), threshold.item()
 
 
 @torch.no_grad()
@@ -152,8 +154,9 @@ def main() -> None:
     if config.loss == "cakld":
         confidence = get_confidence(bf16_model, samples)
         print(f"confidence {confidence:.4f}")
-    low_kl, high_kl = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
-    print(f"before training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f}")
+    low_kl, high_kl, entropy_threshold = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
+    print(f"before training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f} entropy threshold {entropy_threshold:.4f}")
+    mean_weight = 1 + config.high_entropy_ratio * config.high_entropy_weight
     kls = []
     hidden_losses = []
     log_time = time.perf_counter()
@@ -174,6 +177,7 @@ def main() -> None:
                     bf16_logprobs = log_softmax(bf16_model.lm_head(bf16_hiddens).float(), dim=-1)
                     bf16_probs = bf16_logprobs.exp()
                     entropy = -(bf16_probs * bf16_logprobs).sum(dim=-1)
+                    weight = 1 + config.high_entropy_weight * (entropy > entropy_threshold)
                     bf16_hiddens = bf16_hiddens.float()
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     hiddens = model.model(input_ids=input_ids).last_hidden_state[0, :-1]
@@ -189,7 +193,7 @@ def main() -> None:
                     target_loss = kl
                 # hidden error to bf16 weighted by entropy (higher entropy, more weight)
                 hidden_loss = entropy * ((hiddens.float() - bf16_hiddens) ** 2).sum(dim=-1) / (bf16_hiddens**2).sum(dim=-1)
-                loss = (target_loss.sum() + config.hidden_weight * hidden_loss.sum()) / num_positions
+                loss = ((weight * target_loss).sum() / mean_weight + config.hidden_weight * hidden_loss.sum()) / num_positions
                 loss.backward()
                 batch_kl += kl.sum().item() / num_positions
                 batch_hidden_loss += hidden_loss.sum().item() / num_positions
@@ -206,7 +210,7 @@ def main() -> None:
                 log_time = time.perf_counter()
                 torch.cuda.reset_peak_memory_stats()
 
-    low_kl, high_kl = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
+    low_kl, high_kl, _ = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
     print(f"after training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f}")
     if not config.save:
         return
@@ -216,7 +220,7 @@ def main() -> None:
             parent_name, child_name = name.rsplit(".", 1)
             setattr(model.model.layers.get_submodule(parent_name), child_name, module)
     model.to(torch.bfloat16)
-    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs), model)
+    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs, config.high_entropy_weight), model)
 
 
 if __name__ == "__main__":

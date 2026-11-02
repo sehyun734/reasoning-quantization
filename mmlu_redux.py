@@ -23,6 +23,7 @@ class Config:
     qat_num_samples: int = 2048
     loss: Literal["kl", "ce", "cakld"] = "kl"
     hidden_weight: float = 0.0
+    high_entropy_weight: float = 0.0
     on_policy: bool = False
     scale_learning_rate: float = 0.0
     lr_schedule: Literal["constant", "cosine"] = "constant"
@@ -38,7 +39,7 @@ def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
     if config.method == "qat":
-        target = make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs)
+        target = make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs, config.high_entropy_weight)
     else:
         target = make_target_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists("mmlu_redux", target, file_name):

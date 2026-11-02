@@ -48,8 +48,12 @@ def make_qat_path(
     scale_learning_rate: float,
     lr_schedule: str,
     num_epochs: int,
+    high_entropy_weight: float,
 ) -> str:
-    return f"qat/{model_name}/num_bits={num_bits},group_size={group_size},qat_num_samples={qat_num_samples},loss={loss},hidden_weight={hidden_weight},on_policy={on_policy},scale_learning_rate={scale_learning_rate},lr_schedule={lr_schedule},num_epochs={num_epochs}"
+    path = f"qat/{model_name}/num_bits={num_bits},group_size={group_size},qat_num_samples={qat_num_samples},loss={loss},hidden_weight={hidden_weight},on_policy={on_policy},scale_learning_rate={scale_learning_rate},lr_schedule={lr_schedule},num_epochs={num_epochs}"
+    if high_entropy_weight != 0.0:
+        path += f",high_entropy_weight={high_entropy_weight}"
+    return path
 
 
 def make_penalty_path(

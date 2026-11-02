@@ -11,8 +11,8 @@ from primitives.paths import make_qat_path, make_target_path
 from primitives.plot import ENTROPY_COLORS, METHOD_COLORS, PANEL_MARGIN, fit_bar_width, get_figsize, get_length_ratio, get_loop_ratio, get_panel_width, plot_bars, save_figure
 
 QAT_VARIANTS = {
-    "3 epochs\n+ hidden loss": (2048, "kl", 1.0, False, 0.0, "cosine", 3, "tab:olive"),
-    "5 epochs\n+ hidden loss": (2048, "kl", 1.0, False, 0.0, "cosine", 5, "darkolivegreen"),
+    "3 epochs\n+ hidden loss": (2048, "kl", 1.0, False, 0.0, "cosine", 3, 0.0, "tab:olive"),
+    "5 epochs\n+ hidden loss": (2048, "kl", 1.0, False, 0.0, "cosine", 5, 0.0, "darkolivegreen"),
 }
 
 
@@ -30,8 +30,8 @@ def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
     targets = {method: make_target_path(method, config.model_name, config.num_bits, config.group_size, config.num_samples) for method in ["bf16", "gptq"]}
-    for label, (qat_num_samples, loss, hidden_weight, on_policy, scale_learning_rate, lr_schedule, num_epochs, _) in QAT_VARIANTS.items():
-        targets[label] = make_qat_path(config.model_name, config.num_bits, config.group_size, qat_num_samples, loss, hidden_weight, on_policy, scale_learning_rate, lr_schedule, num_epochs)
+    for label, (qat_num_samples, loss, hidden_weight, on_policy, scale_learning_rate, lr_schedule, num_epochs, high_entropy_weight, _) in QAT_VARIANTS.items():
+        targets[label] = make_qat_path(config.model_name, config.num_bits, config.group_size, qat_num_samples, loss, hidden_weight, on_policy, scale_learning_rate, lr_schedule, num_epochs, high_entropy_weight)
     labels = list(targets)
     colors = [METHOD_COLORS["bf16"], METHOD_COLORS["gptq"]] + [color for *_, color in QAT_VARIANTS.values()]
     results = {label: load_result("mmlu_redux", target, file_name) for label, target in targets.items()}
