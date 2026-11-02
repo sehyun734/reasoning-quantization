@@ -5,7 +5,7 @@ import time
 from simple_parsing import parse
 import torch
 
-from utils.data import load_numina_prompts, save_numina
+from utils.dataset import load_numina_prompts, save_numina
 from utils.format import format_duration
 from utils.model import generate_vllm, get_prompt_ids, load_vllm
 from utils.paths import make_numina_path

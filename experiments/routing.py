@@ -26,7 +26,7 @@ from vllm.model_executor.models.qwen2 import Qwen2Model  # type: ignore
 from vllm.model_executor.models.qwen3 import Qwen3DecoderLayer  # type: ignore
 from vllm.model_executor.models.utils import AutoWeightsLoader, maybe_prefix  # type: ignore
 
-from utils.data import load_math500
+from utils.dataset import load_math500
 from utils.evaluation import evaluate_math500
 from utils.format import format_duration
 from utils.hub import download_model, load_tensors, result_exists, save_result

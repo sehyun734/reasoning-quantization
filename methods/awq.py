@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn import Linear, Module
 
 from utils.capture import capture_layer_inputs
-from utils.data import load_numina
+from utils.dataset import load_numina
 from utils.format import format_duration, format_memory
 from utils.hub import save_quantized
 from utils.model import load_model

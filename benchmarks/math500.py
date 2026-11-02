@@ -5,7 +5,7 @@ from typing import Literal
 
 from simple_parsing import parse
 
-from utils.data import load_math500
+from utils.dataset import load_math500
 from utils.evaluation import evaluate_math500
 from utils.format import format_duration
 from utils.hub import download_model, result_exists, save_result

@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn.functional import log_softmax
 from transformers import PreTrainedModel
 
-from utils.data import load_math500, load_mmlu_redux
+from utils.dataset import load_math500, load_mmlu_redux
 from utils.format import format_duration, format_memory
 from utils.hub import download_model, load_result, result_exists, save_tensors
 from utils.model import TEMPERATURE, TOP_K, TOP_P, get_prompt_ids, load_model
