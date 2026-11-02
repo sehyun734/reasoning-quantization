@@ -41,6 +41,11 @@ def main() -> None:
                 route_results[route].append(load_result("math500", target, file_name) if result_exists("math500", target, file_name) else None)
         if any(any(ratio_results) for ratio_results in route_results.values()):
             results[method] = (load_result("math500", quantized_path, file_name), route_results)
+    is_used = [any(route_results[route][index] for _, route_results in results.values() for route in ROUTE_COLORS) for index in range(len(ROUTE_RATIOS))]
+    route_ratios = [ratio for ratio, used in zip(ROUTE_RATIOS, is_used) if used]
+    for _, route_results in results.values():
+        for route in ROUTE_COLORS:
+            route_results[route] = [result for result, used in zip(route_results[route], is_used) if used]
     answers = [answer for _, answer in load_math500()]
     panels = [
         ("accuracy", lambda result: result["accuracy"], "{x:.1%}"),
@@ -49,7 +54,7 @@ def main() -> None:
         ("correct intermediate, wrong final answer", lambda result: get_intermediate_answer_ratio(result, answers), "{x:.1%}"),
     ]
 
-    panel_widths = [get_panel_width(len(ROUTE_RATIOS), len(ROUTE_COLORS))] * len(panels)
+    panel_widths = [get_panel_width(len(route_ratios), len(ROUTE_COLORS))] * len(panels)
     fig = plt.figure(figsize=get_figsize(panel_widths, len(results)), layout="constrained")
     for subfig, (method, (quantized_result, route_results)) in zip(fig.subfigures(len(results), 1, squeeze=False)[:, 0], results.items()):
         axes = subfig.subplots(1, len(panels), width_ratios=panel_widths)
@@ -62,7 +67,7 @@ def main() -> None:
             for route, color in ROUTE_COLORS.items():
                 values = [get_value(result) if result else math.nan for result in route_results[route]]
                 groups.append((values, color, ["" if math.isnan(value) else text_format.format(x=value) for value in values]))
-            plot_bars(ax, ROUTE_RATIOS, groups)
+            plot_bars(ax, route_ratios, groups)
             all_values = line_values + [value for values, _, _ in groups for value in values if not math.isnan(value)]
             span = max(all_values) - min(all_values)
             ax.set_ylim(max(min(all_values) - 0.2 * span, 0), max(all_values) + 0.2 * span)
