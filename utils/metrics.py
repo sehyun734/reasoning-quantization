@@ -3,6 +3,7 @@ from statistics import mean, median
 
 import math_verify
 
+STOPWORDS = {"the", "an", "is", "are", "was", "were", "be", "been", "being", "am", "it", "it's", "its", "this", "that", "that's", "these", "those", "of", "to", "in", "on", "at", "by", "with", "from", "as", "into", "for", "and", "or", "we", "me", "my", "our", "us", "you", "your", "he", "she", "they", "them", "their", "his", "her", "there", "there's", "here", "which", "what", "where", "who", "how", "has", "have", "had", "do", "does", "did", "can", "could", "would", "will"}
 ANSWER_PATTERN = re.compile(r"answer (?:is|should be|would be|must be)\s*:?\s*([^\n]{1,80}?)(?:\.\s|\n|$)", re.IGNORECASE)
 
 
@@ -30,3 +31,10 @@ def get_intermediate_answer_ratio(
         gold = math_verify.parse(f"${answer}$")
         ratios.append(any(math_verify.verify(gold, math_verify.parse(match)) for match in ANSWER_PATTERN.findall(think)))
     return mean(ratios)
+
+
+def get_words(
+    text: str,
+) -> list[str]:
+    words = re.findall(r"(?<![\\a-z])[a-z]+(?:'[a-z]+)?(?:-[a-z]{2,})*", text.lower())
+    return [word for word in words if len(word) > 1 and word not in STOPWORDS]
