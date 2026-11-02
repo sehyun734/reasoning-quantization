@@ -40,6 +40,6 @@ def make_target_path(
 def make_routing_path(
     quantized_path: str,
     route_ratio: float,
-    route: str,
+    route_position: str,
 ) -> str:
-    return f"routing/{quantized_path}/route_ratio={route_ratio},route={route}"
+    return f"routing/{quantized_path}/route_ratio={route_ratio},route_position={route_position}"
