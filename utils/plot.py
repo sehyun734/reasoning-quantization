@@ -9,6 +9,7 @@ ENTROPY_COLORS = {"low entropy": "tab:blue", "high entropy": "tab:red"}
 BAR_INCHES = 0.5
 BAR_GAP = 1
 PANEL_HEIGHT = 3.5
+LINE_PANEL_WIDTH = 3.5
 PANEL_MARGIN = 0.9
 WORD_BAR_INCHES = 0.12
 WORD_PANEL_WIDTH = 4.5
