@@ -25,7 +25,7 @@ def capture_layer_inputs(
     handle = layer.register_forward_pre_hook(hook, with_kwargs=True)
     for input_ids in samples:
         try:
-            model(input_ids[None].to(model.device), use_cache=False)
+            model(input_ids[None, :].to(model.device), use_cache=False)
         except StopForward:
             pass
     handle.remove()

@@ -1,4 +1,5 @@
 import torch
+from torch import Tensor
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
 from vllm import LLM, SamplingParams  # type: ignore
 from vllm.outputs import CompletionOutput  # type: ignore
@@ -38,3 +39,10 @@ def generate_vllm(
     sampling_params = SamplingParams(temperature=TEMPERATURE, top_p=TOP_P, top_k=TOP_K, max_tokens=max_generation_len)
     outputs = model.chat(messages, sampling_params, use_tqdm=True, chat_template_kwargs={"enable_thinking": True})
     return [output.outputs[0] for output in outputs]
+
+
+def get_prompt_ids(
+    tokenizer: PreTrainedTokenizerBase,
+    prompt: str,
+) -> Tensor:
+    return tokenizer.apply_chat_template([{"role": "user", "content": prompt}], add_generation_prompt=True, enable_thinking=True, return_tensors="pt")["input_ids"][0]

@@ -7,7 +7,7 @@ import torch
 
 from utils.data import load_numina_prompts, save_numina
 from utils.format import format_duration
-from utils.model import generate_vllm, load_vllm
+from utils.model import generate_vllm, get_prompt_ids, load_vllm
 from utils.paths import make_numina_path
 
 
@@ -31,7 +31,7 @@ def main() -> None:
 
     input_ids = []
     for prompt, output in zip(prompts, outputs):
-        prompt_ids = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], add_generation_prompt=True, enable_thinking=True, return_tensors="pt")["input_ids"][0]
+        prompt_ids = get_prompt_ids(tokenizer, prompt)
         input_ids.append(torch.cat([prompt_ids, torch.tensor(output.token_ids)]))
     save_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed), input_ids)
 
