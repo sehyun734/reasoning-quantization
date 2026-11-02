@@ -27,25 +27,39 @@ class Config:
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
-    # which numina data to train on
-    qat_num_samples: int = 2048
-    max_generation_len: int = 8192
-    # cut prompt + reasoning to this length
-    max_sequence_len: int = 8192
-    num_train_samples: int = 2048
-    loss: Literal["kl", "ce", "cakld"] = "kl"
-    hidden_weight: float = 0.0
-    high_entropy_weight: float = 0.0
-    on_policy: bool = False
-    scale_learning_rate: float = 0.0
-    lr: float = 1e-4
-    lr_schedule: Literal["constant", "cosine"] = "constant"
-    warmup_ratio: float = 0.05
-    num_epochs: int = 1
-    batch_size: int = 8
-    high_entropy_ratio: float = 0.2
     save: bool = True
     seed: int = 0
+    # which numina data to train on
+    qat_num_samples: int = 2048
+    # train on gptq reasoning (not bf16), so inputs match what quantized model generates
+    on_policy: bool = False
+    max_generation_len: int = 8192
+    # cut prompt + reasoning to this length
+    # calibration config
+    max_sequence_len: int = 8192
+    num_train_samples: int = 2048
+    # extra kl weight on positions with high bf16 entropy
+    # 0.0 is off, and 2.0 gives them 3x weight
+    # NOTE: legacy 2.0 model set entropy threshold from 256 random samples, not all train data
+    high_entropy_weight: float = 0.0
+    high_entropy_ratio: float = 0.2
+    # extra loss on last hidden state
+    # match hidden too (not only logits)
+    hidden_weight: float = 0.0
+    # main loss and baselines
+    # kl is forward kl to bf16, ce is sft on bf16 reasoning
+    # cakld is from bitdistiller, but only its loss
+    loss: Literal["kl", "ce", "cakld"] = "kl"
+    lr: float = 1e-4
+    # train scale too (not only weight), like lsq
+    # 0.0 keeps gptq scale fixed
+    scale_learning_rate: float = 0.0
+    # lr schedule and epochs
+    # NOTE: models in qat.png all use constant lr and 1 epoch
+    num_epochs: int = 1
+    lr_schedule: Literal["constant", "cosine"] = "constant"
+    warmup_ratio: float = 0.05
+    batch_size: int = 8
 
 
 class STELinear(Module):
@@ -77,6 +91,49 @@ class STELinear(Module):
         x: Tensor,
     ) -> Tensor:
         return linear(x, self.quantize(), self.bias)
+
+
+def replace_linears(
+    model: PreTrainedModel,
+    grid: dict[str, Tensor],
+    num_bits: int,
+    group_size: int,
+) -> list[tuple[str, Linear, STELinear]]:
+    linears = [(name, module) for name, module in model.model.layers.named_modules() if isinstance(module, Linear)]
+    replaced = []
+    for name, module in linears:
+        ste_linear = STELinear(module, grid[f"{name}.scale"].to(model.device), grid[f"{name}.zero"].to(model.device), num_bits, group_size)
+        parent_name, child_name = name.rsplit(".", 1)
+        setattr(model.model.layers.get_submodule(parent_name), child_name, ste_linear)
+        replaced.append((name, module, ste_linear))
+    return replaced
+
+
+def get_target_loss(
+    loss: str,
+    kl: Tensor,
+    logprobs: Tensor,
+    bf16_logprobs: Tensor,
+    target_ids: Tensor,
+    confidence: float | None,
+) -> Tensor:
+    if loss == "ce":
+        return -logprobs.gather(-1, target_ids[:, None])[:, 0]
+    if loss == "cakld":
+        reverse_kl = (logprobs.exp() * (logprobs - bf16_logprobs)).sum(dim=-1)
+        return confidence * reverse_kl + (1 - confidence) * kl
+    return kl
+
+
+def get_position_weights(
+    entropy: Tensor,
+    entropy_threshold: float,
+    high_entropy_ratio: float,
+    high_entropy_weight: float,
+) -> Tensor:
+    weights = 1 + high_entropy_weight * (entropy > entropy_threshold)
+    # divide by mean weight, so loss scale stays same for any weight
+    return weights / (1 + high_entropy_ratio * high_entropy_weight)
 
 
 @torch.no_grad()
@@ -129,17 +186,14 @@ def main() -> None:
         numina_path = make_numina_path(config.model_name, config.qat_num_samples, config.max_generation_len, config.seed)
     samples = [input_ids[: config.max_sequence_len] for input_ids in load_numina(numina_path)[: config.num_train_samples]]
 
-    grid = load_grid(quantized_path)
-    linears = [(name, module) for name, module in model.model.layers.named_modules() if isinstance(module, Linear)]
-    # swap every linear for ste linear
-    ste_linears = []
-    for name, module in linears:
-        ste_linear = STELinear(module, grid[f"{name}.scale"].to(model.device), grid[f"{name}.zero"].to(model.device), config.num_bits, config.group_size)
+    # use ste linears, so gradient goes through round
+    replaced = replace_linears(model, load_grid(quantized_path), config.num_bits, config.group_size)
+    ste_linears = [ste_linear for _, _, ste_linear in replaced]
+    for ste_linear in ste_linears:
         ste_linear.weight.requires_grad_(True)
         ste_linear.scale.requires_grad_(config.scale_learning_rate > 0)
-        parent_name, child_name = name.rsplit(".", 1)
-        setattr(model.model.layers.get_submodule(parent_name), child_name, ste_linear)
-        ste_linears.append(ste_linear)
+
+    # scale has its own lr (lsq only), and schedule spans all epochs
     parameters = [{"params": [ste_linear.weight for ste_linear in ste_linears], "lr": config.lr}]
     if config.scale_learning_rate > 0:
         parameters.append({"params": [ste_linear.scale for ste_linear in ste_linears], "lr": config.scale_learning_rate})
@@ -151,12 +205,15 @@ def main() -> None:
     else:
         scheduler = get_constant_schedule(optimizer)
 
+    # before training, get confidence (cakld only) and kl by entropy
+    # entropy threshold here also sets high entropy positions for weights
+    confidence = None
     if config.loss == "cakld":
         confidence = get_confidence(bf16_model, samples)
         print(f"confidence {confidence:.4f}")
     low_kl, high_kl, entropy_threshold = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
     print(f"before training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f} entropy threshold {entropy_threshold:.4f}")
-    mean_weight = 1 + config.high_entropy_ratio * config.high_entropy_weight
+
     kls = []
     hidden_losses = []
     log_time = time.perf_counter()
@@ -172,28 +229,24 @@ def main() -> None:
 
             for input_ids in batch:
                 input_ids = input_ids[None].to(model.device)
+                # compute bf16 targets and entropy, no gradient
                 with torch.no_grad():
                     bf16_hiddens = bf16_model.model(input_ids=input_ids).last_hidden_state[0, :-1]
                     bf16_logprobs = log_softmax(bf16_model.lm_head(bf16_hiddens).float(), dim=-1)
                     bf16_probs = bf16_logprobs.exp()
                     entropy = -(bf16_probs * bf16_logprobs).sum(dim=-1)
-                    weight = 1 + config.high_entropy_weight * (entropy > entropy_threshold)
+                    weights = get_position_weights(entropy, entropy_threshold, config.high_entropy_ratio, config.high_entropy_weight)
                     bf16_hiddens = bf16_hiddens.float()
+                # compute same from qat model, with gradient
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     hiddens = model.model(input_ids=input_ids).last_hidden_state[0, :-1]
                     logprobs = log_softmax(model.lm_head(hiddens).float(), dim=-1)
                 # kl to bf16 distribution
                 kl = -entropy - (bf16_probs * logprobs).sum(dim=-1)
-                if config.loss == "ce":
-                    target_loss = -logprobs.gather(-1, input_ids[0, 1:, None])[:, 0]
-                elif config.loss == "cakld":
-                    reverse_kl = (logprobs.exp() * (logprobs - bf16_logprobs)).sum(dim=-1)
-                    target_loss = confidence * reverse_kl + (1 - confidence) * kl
-                else:
-                    target_loss = kl
+                target_loss = get_target_loss(config.loss, kl, logprobs, bf16_logprobs, input_ids[0, 1:], confidence)
                 # hidden error to bf16 weighted by entropy (higher entropy, more weight)
                 hidden_loss = entropy * ((hiddens.float() - bf16_hiddens) ** 2).sum(dim=-1) / (bf16_hiddens**2).sum(dim=-1)
-                loss = ((weight * target_loss).sum() / mean_weight + config.hidden_weight * hidden_loss.sum()) / num_positions
+                loss = ((weights * target_loss).sum() + config.hidden_weight * hidden_loss.sum()) / num_positions
                 loss.backward()
                 batch_kl += kl.sum().item() / num_positions
                 batch_hidden_loss += hidden_loss.sum().item() / num_positions
@@ -212,10 +265,11 @@ def main() -> None:
 
     low_kl, high_kl, _ = get_kl_by_entropy(model, bf16_model, samples, config.high_entropy_ratio)
     print(f"after training low entropy kl {low_kl:.4f} high entropy kl {high_kl:.4f}")
+
     if not config.save:
         return
     with torch.no_grad():
-        for (name, module), ste_linear in zip(linears, ste_linears):
+        for name, module, ste_linear in replaced:
             module.weight.copy_(ste_linear.quantize())
             parent_name, child_name = name.rsplit(".", 1)
             setattr(model.model.layers.get_submodule(parent_name), child_name, module)

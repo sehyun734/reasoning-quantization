@@ -20,16 +20,16 @@ class Config:
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
-    qat_num_samples: int = 2048
-    loss: Literal["kl", "ce", "cakld"] = "kl"
-    hidden_weight: float = 0.0
-    high_entropy_weight: float = 0.0
-    on_policy: bool = False
-    scale_learning_rate: float = 0.0
-    lr_schedule: Literal["constant", "cosine"] = "constant"
-    num_epochs: int = 1
-    max_generation_len: int = 32768
     seed: int = 0
+    qat_num_samples: int = 2048
+    on_policy: bool = False
+    high_entropy_weight: float = 0.0
+    hidden_weight: float = 0.0
+    loss: Literal["kl", "ce", "cakld"] = "kl"
+    scale_learning_rate: float = 0.0
+    num_epochs: int = 1
+    lr_schedule: Literal["constant", "cosine"] = "constant"
+    max_generation_len: int = 32768
 
 
 def main() -> None:

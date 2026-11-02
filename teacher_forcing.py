@@ -23,17 +23,17 @@ class Config:
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
+    seed: int = 0
     qat_num_samples: int = 2048
-    loss: Literal["kl", "ce", "cakld"] = "kl"
-    hidden_weight: float = 0.0
-    high_entropy_weight: float = 0.0
     on_policy: bool = False
+    high_entropy_weight: float = 0.0
+    hidden_weight: float = 0.0
+    loss: Literal["kl", "ce", "cakld"] = "kl"
     scale_learning_rate: float = 0.0
-    lr_schedule: Literal["constant", "cosine"] = "constant"
     num_epochs: int = 1
+    lr_schedule: Literal["constant", "cosine"] = "constant"
     dataset: Literal["math500", "mmlu_redux"] = "math500"
     num_per_subject: int = 40
-    seed: int = 0
     chunk_len: int = 2048
 
 
