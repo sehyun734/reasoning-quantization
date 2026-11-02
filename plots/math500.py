@@ -33,7 +33,11 @@ def main() -> None:
     bf16_result = results["bf16"]
     answers = [answer for _, answer in load_math500()]
 
-    accuracies, truncateds, length_ratios, loop_ratios, intermediate_answer_ratios = [], [], [], [], []
+    accuracies = []
+    truncateds = []
+    length_ratios = []
+    loop_ratios = []
+    intermediate_answer_ratios = []
     for method in methods:
         result = results[method]
         accuracies.append(result["accuracy"])

@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel, PreTrainedTokenizerBase
+from transformers import AutoModelForCausalLM, PreTrainedModel, PreTrainedTokenizerBase
 from vllm import LLM, SamplingParams  # type: ignore
 from vllm.outputs import CompletionOutput  # type: ignore
 
@@ -13,12 +13,10 @@ TOP_K = 20
 
 def load_model(
     model_path: str,
-    model_name: str,
-) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+) -> PreTrainedModel:
     model = AutoModelForCausalLM.from_pretrained(model_path, dtype=torch.bfloat16, device_map="auto")
     model.requires_grad_(False)
-    return model, tokenizer
+    return model
 
 
 def load_vllm(
@@ -46,3 +44,19 @@ def get_prompt_ids(
     prompt: str,
 ) -> Tensor:
     return tokenizer.apply_chat_template([{"role": "user", "content": prompt}], add_generation_prompt=True, enable_thinking=True, return_tensors="pt")["input_ids"][0]
+
+
+def get_think_ids(
+    tokenizer: PreTrainedTokenizerBase,
+    think: str,
+) -> Tensor:
+    return tokenizer(think, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+
+
+def get_think_hiddens(
+    model: PreTrainedModel,
+    input_ids: Tensor,
+    prompt_len: int,
+) -> Tensor:
+    return model.model(input_ids=input_ids[None, :].to(model.device)).last_hidden_state[0, prompt_len - 1 : -1]
+

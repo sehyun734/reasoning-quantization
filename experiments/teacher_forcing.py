@@ -7,12 +7,12 @@ from simple_parsing import parse
 import torch
 from torch import Tensor
 from torch.nn.functional import log_softmax
-from transformers import PreTrainedModel
+from transformers import AutoTokenizer
 
 from utils.dataset import load_math500, load_mmlu_redux
 from utils.format import format_duration, format_memory
 from utils.hub import download_model, load_result, result_exists, save_tensors
-from utils.model import TEMPERATURE, TOP_K, TOP_P, get_prompt_ids, load_model
+from utils.model import TEMPERATURE, TOP_K, TOP_P, get_prompt_ids, get_think_hiddens, get_think_ids, load_model
 from utils.paths import make_quantized_path
 
 
@@ -28,14 +28,6 @@ class Config:
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
-
-
-def get_think_hiddens(
-    model: PreTrainedModel,
-    input_ids: Tensor,
-    prompt_len: int,
-) -> Tensor:
-    return model.model(input_ids=input_ids[None, :].to(model.device)).last_hidden_state[0, prompt_len - 1 : -1]
 
 
 def get_sampling_probs(
@@ -60,15 +52,16 @@ def main() -> None:
     prompts = [prompt for prompt, _ in (load_math500() if config.dataset == "math500" else load_mmlu_redux(config.num_per_subject))]
     result = load_result(config.dataset, f"bf16/{config.model_name}", file_name)
 
-    bf16_model, tokenizer = load_model(config.model_name, config.model_name)
-    quantized_model, _ = load_model(download_model(quantized_path), config.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+    bf16_model = load_model(config.model_name)
+    quantized_model = load_model(download_model(quantized_path))
 
     # use only bf16 reasoning on correctly solved problems
     samples = []
     for prompt, think, correct in zip(prompts, result["thinks"], result["corrects"]):
         if correct:
             prompt_ids = get_prompt_ids(tokenizer, prompt)
-            think_ids = tokenizer(think, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+            think_ids = get_think_ids(tokenizer, think)
             samples.append((prompt_ids, think_ids))
     print(f"samples {len(samples)} positions {sum(len(think_ids) for _, think_ids in samples)}")
 

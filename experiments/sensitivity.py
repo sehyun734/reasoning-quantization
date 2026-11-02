@@ -1,0 +1,136 @@
+from dataclasses import dataclass
+from statistics import mean
+import time
+
+from simple_parsing import parse
+import torch
+from torch.nn.functional import log_softmax
+from transformers import AutoTokenizer
+from vllm import LLM, SamplingParams  # type: ignore
+from vllm.outputs import RequestOutput  # type: ignore
+
+from utils.dataset import load_math500
+from utils.evaluation import evaluate_math500
+from utils.format import format_duration
+from utils.hub import load_result, result_exists, save_result, save_tensors
+from utils.metrics import get_loop_ratio
+from utils.model import TEMPERATURE, TOP_K, TOP_P, get_prompt_ids, get_think_hiddens, get_think_ids, load_model, load_vllm
+from utils.paths import make_sensitivity_path
+
+
+@dataclass
+class Config:
+    model_name: str = "Qwen/Qwen3-0.6B"
+    seed: int = 0
+    num_bins: int = 5
+    num_continuations: int = 4
+    max_generation_len: int = 32768
+    chunk_len: int = 2048
+
+
+def generate_continuations(
+    model: LLM,
+    input_ids: list[list[int]],
+    max_generation_lens: list[int],
+    num_continuations: int,
+) -> list[RequestOutput]:
+    sampling_params = [SamplingParams(temperature=TEMPERATURE, top_p=TOP_P, top_k=TOP_K, max_tokens=max_generation_len, n=num_continuations) for max_generation_len in max_generation_lens]
+    return model.generate([{"prompt_token_ids": ids} for ids in input_ids], sampling_params, use_tqdm=True)
+
+
+@torch.no_grad()
+def main() -> None:
+    config = parse(Config)
+    file_name = f"seed={config.seed}"
+    target = make_sensitivity_path(config.model_name, config.num_bins, config.num_continuations)
+    if result_exists("sensitivity/math500", target, file_name):
+        print(f"{target} already evaluated")
+        return
+    model = load_model(config.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+    problems = load_math500()
+    bf16_result = load_result("math500", f"bf16/{config.model_name}", file_name)
+
+    samples = []
+    for problem_index, ((prompt, answer), think, correct) in enumerate(zip(problems, bf16_result["thinks"], bf16_result["corrects"])):
+        if correct:
+            prompt_ids = get_prompt_ids(tokenizer, prompt)
+            think_ids = get_think_ids(tokenizer, think)
+            samples.append((problem_index, answer, prompt_ids, think_ids))
+
+    entropies = []
+    top_ids = []
+    top_probs = []
+    for _, _, prompt_ids, think_ids in samples:
+        hiddens = get_think_hiddens(model, torch.cat([prompt_ids, think_ids]), len(prompt_ids))
+        sample_entropies = []
+        sample_top_ids = []
+        sample_top_probs = []
+        for start in range(0, len(think_ids), config.chunk_len):
+            logprobs = log_softmax(model.lm_head(hiddens[start : start + config.chunk_len]).float(), dim=-1)
+            sample_entropies.append(-(logprobs.exp() * logprobs).sum(dim=-1).cpu())
+            chunk_top_logprobs, chunk_top_ids = logprobs.topk(TOP_K, dim=-1)
+            sample_top_ids.append(chunk_top_ids.cpu())
+            sample_top_probs.append(chunk_top_logprobs.exp().cpu())
+        entropies.append(torch.cat(sample_entropies))
+        top_ids.append(torch.cat(sample_top_ids))
+        top_probs.append(torch.cat(sample_top_probs))
+    del model
+    torch.cuda.empty_cache()
+    entropy_thresholds = torch.cat(entropies).quantile(torch.linspace(0, 1, config.num_bins + 1)[1:-1])
+    print(f"samples {len(samples)} positions {sum(map(len, entropies))} thresholds {[round(threshold, 4) for threshold in entropy_thresholds.tolist()]}")
+
+    generator = torch.Generator().manual_seed(config.seed)
+    special_ids = torch.tensor(list(tokenizer.added_tokens_decoder))
+    interventions = []
+    for (problem_index, answer, prompt_ids, think_ids), sample_entropies, sample_top_ids, sample_top_probs in zip(samples, entropies, top_ids, top_probs):
+        entropy_bins = torch.bucketize(sample_entropies, entropy_thresholds)
+        for bin_index in range(config.num_bins):
+            candidates = (entropy_bins == bin_index).nonzero()[:, 0]
+            for position in candidates[torch.randperm(len(candidates), generator=generator)[:1]].tolist():
+                original = think_ids[position].item()
+                is_excluded = (sample_top_ids[position] == original) | torch.isin(sample_top_ids[position], special_ids)
+                probs = torch.where(is_excluded, 0, sample_top_probs[position])
+                changed = sample_top_ids[position][torch.multinomial(probs, 1, generator=generator)].item()
+                interventions.append({"problem": problem_index, "answer": answer, "bin": bin_index, "position": position, "entropy": sample_entropies[position].item(), "original": original, "changed": changed, "prompt_ids": prompt_ids.tolist(), "think_ids": think_ids[:position].tolist()})
+    print(f"interventions {len(interventions)}")
+
+    model = load_vllm(config.model_name, config.model_name, config.seed)
+    log_time = time.perf_counter()
+    input_ids = [intervention["prompt_ids"] + intervention["think_ids"] + [intervention[condition]] for intervention in interventions for condition in ["original", "changed"]]
+    max_generation_lens = [config.max_generation_len - len(intervention["think_ids"]) - 1 for intervention in interventions for _ in range(2)]
+    outputs = generate_continuations(model, input_ids, max_generation_lens, config.num_continuations)
+
+    result = {name: [] for name in ["problems", "bins", "positions", "entropies", "original_tokens", "changed_tokens"]}
+    continuation_ids = []
+    for condition in ["original", "changed"]:
+        result.update({f"{condition}_corrects": [], f"{condition}_think_lens": [], f"{condition}_loop_ratios": []})
+    for intervention_index, intervention in enumerate(interventions):
+        result["problems"].append(intervention["problem"])
+        result["bins"].append(intervention["bin"])
+        result["positions"].append(intervention["position"])
+        result["entropies"].append(intervention["entropy"])
+        result["original_tokens"].append(intervention["original"])
+        result["changed_tokens"].append(intervention["changed"])
+        for offset, condition in enumerate(["original", "changed"]):
+            continuations = outputs[2 * intervention_index + offset].outputs
+            continuation_ids += [torch.tensor(continuation.token_ids, dtype=torch.int32) for continuation in continuations]
+            evaluated = evaluate_math500(continuations, [intervention["answer"]] * len(continuations), tokenizer)
+            prefix_ids = intervention["think_ids"] + [intervention[condition]]
+            thinks = [tokenizer.decode(prefix_ids + list(continuation.token_ids)[:think_len], skip_special_tokens=True) for continuation, think_len in zip(continuations, evaluated["think_lens"])]
+            result[f"{condition}_corrects"].append(evaluated["corrects"])
+            result[f"{condition}_think_lens"].append([len(prefix_ids) + think_len for think_len in evaluated["think_lens"]])
+            result[f"{condition}_loop_ratios"].append(get_loop_ratio({"thinks": thinks}))
+
+    for bin_index in range(config.num_bins):
+        in_bin = [position_bin == bin_index for position_bin in result["bins"]]
+        accuracies = [mean(mean(corrects) for corrects, used in zip(result[f"{condition}_corrects"], in_bin) if used) for condition in ["original", "changed"]]
+        loop_ratios = [mean(loop_ratio for loop_ratio, used in zip(result[f"{condition}_loop_ratios"], in_bin) if used) for condition in ["original", "changed"]]
+        print(f"bin {bin_index} accuracy {accuracies[0]:.2%} -> {accuracies[1]:.2%} loop {loop_ratios[0]:.2%} -> {loop_ratios[1]:.2%}")
+    print(f"{target} time {format_duration(time.perf_counter() - log_time)}")
+    save_result("sensitivity/math500", target, file_name, result)
+    save_tensors("sensitivity/math500", target, file_name, {"token_ids": torch.cat(continuation_ids), "lengths": torch.tensor([len(ids) for ids in continuation_ids]).view(len(interventions), 2, config.num_continuations)})
+
+
+if __name__ == "__main__":
+    main()

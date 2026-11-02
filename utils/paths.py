@@ -43,3 +43,11 @@ def make_routing_path(
     route_position: str,
 ) -> str:
     return f"{quantized_path}/route_ratio={route_ratio},route_position={route_position}"
+
+
+def make_sensitivity_path(
+    model_name: str,
+    num_bins: int,
+    num_continuations: int,
+) -> str:
+    return f"bf16/{model_name}/num_bins={num_bins},num_continuations={num_continuations}"

@@ -92,7 +92,7 @@ def quantize_weight(
 def main() -> None:
     config = parse(Config)
     quantized_path = make_quantized_path("gptq", config.model_name, config.num_bits, config.group_size, config.num_samples)
-    model, _ = load_model(config.model_name, config.model_name)
+    model = load_model(config.model_name)
     samples = [input_ids[: config.max_sequence_len] for input_ids in load_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed))]
     layers = model.model.layers
     grid = {}

@@ -174,7 +174,7 @@ def find_clip(
 @torch.no_grad()
 def main() -> None:
     config = parse(Config)
-    model, _ = load_model(config.model_name, config.model_name)
+    model = load_model(config.model_name)
     samples = [input_ids[: config.max_sequence_len] for input_ids in load_numina(make_numina_path(config.model_name, config.num_samples, config.max_generation_len, config.seed))]
     layers = model.model.layers
 

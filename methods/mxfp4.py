@@ -45,7 +45,7 @@ def quantize_weight(
 @torch.no_grad()
 def main() -> None:
     config = parse(Config)
-    model, _ = load_model(config.model_name, config.model_name)
+    model = load_model(config.model_name)
     layers = model.model.layers
 
     log_time = time.perf_counter()
