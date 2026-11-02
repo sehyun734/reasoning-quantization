@@ -175,13 +175,13 @@ def main() -> None:
     file_name = f"seed={config.seed}"
     quantized_path = make_quantized_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     target = make_routing_path(quantized_path, config.route_ratio, config.route_position)
-    if result_exists("math500", target, file_name):
+    if result_exists("routing/math500", target, file_name):
         print(f"{target} already evaluated")
         return
     problems = load_math500()
 
     # 1) entropy threshold from bf16 teacher forcing (seed 0)
-    bf16_entropy = load_tensors("teacher_forcing_math500", quantized_path, "seed=0")["bf16_entropy"]
+    bf16_entropy = load_tensors("teacher_forcing/math500", quantized_path, "seed=0")["bf16_entropy"]
     entropy_threshold = None
     if config.route_position == "high":
         entropy_threshold = bf16_entropy.quantile(1 - config.route_ratio).item()
@@ -203,7 +203,7 @@ def main() -> None:
     outputs = generate_vllm(model, [prompt for prompt, _ in problems], config.max_generation_len)
     result = evaluate_math500(outputs, [answer for _, answer in problems], tokenizer)
     print(f"{target} accuracy {result['accuracy']:.2%} think_len {mean(result['think_lens']):.0f} truncated {mean(result['truncateds']):.2%} time {format_duration(time.perf_counter() - log_time)}")
-    save_result("math500", target, file_name, result)
+    save_result("routing/math500", target, file_name, result)
 
 
 if __name__ == "__main__":

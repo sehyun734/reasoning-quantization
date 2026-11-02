@@ -42,4 +42,4 @@ def make_routing_path(
     route_ratio: float,
     route_position: str,
 ) -> str:
-    return f"routing/{quantized_path}/route_ratio={route_ratio},route_position={route_position}"
+    return f"{quantized_path}/route_ratio={route_ratio},route_position={route_position}"

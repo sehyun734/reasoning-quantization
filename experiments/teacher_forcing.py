@@ -52,7 +52,7 @@ def get_sampling_probs(
 def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
-    entry_name = f"teacher_forcing_{config.dataset}"
+    entry_name = f"teacher_forcing/{config.dataset}"
     quantized_path = make_quantized_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists(entry_name, quantized_path, file_name, "safetensors"):
         print(f"{quantized_path} already computed")

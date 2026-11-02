@@ -48,8 +48,8 @@ def main() -> None:
     results = {}
     for method in ["gptq", "awq", "mxfp4"]:
         quantized_path = make_quantized_path(method, config.model_name, config.num_bits, config.group_size, config.num_samples)
-        if result_exists("teacher_forcing_math500", quantized_path, file_name, "safetensors"):
-            results[method] = load_tensors("teacher_forcing_math500", quantized_path, file_name)
+        if result_exists("teacher_forcing/math500", quantized_path, file_name, "safetensors"):
+            results[method] = load_tensors("teacher_forcing/math500", quantized_path, file_name)
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
     token_classes = get_token_classes([tokenizer.decode([token_id]) for token_id in range(len(tokenizer))])
 
