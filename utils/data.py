@@ -53,13 +53,12 @@ def load_math500() -> list[tuple[str, str]]:
 
 def load_mmlu_redux(
     num_per_subject: int,
-    seed: int,
 ) -> list[tuple[str, str]]:
     samples = []
     for subject in get_dataset_config_names("edinburgh-dawg/mmlu-redux-2.0"):
         if subject in MMLU_MATH_SUBJECTS:
             continue
-        dataset = load_dataset("edinburgh-dawg/mmlu-redux-2.0", subject, split="test").filter(lambda row: row["error_type"] == "ok").shuffle(seed=seed)
+        dataset = load_dataset("edinburgh-dawg/mmlu-redux-2.0", subject, split="test").filter(lambda row: row["error_type"] == "ok")
         for row in dataset.select(range(num_per_subject)):
             choices = "\n".join(f"{letter}. {choice}" for letter, choice in zip("ABCD", row["choices"]))
             samples.append((MMLU_PROMPT.format(question=row["question"], choices=choices), "ABCD"[row["answer"]]))

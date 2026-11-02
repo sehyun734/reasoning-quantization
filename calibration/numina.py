@@ -20,18 +20,15 @@ class Config:
 
 
 def main() -> None:
-    # 1) load prompts and model
     config = parse(Config)
     prompts = load_numina_prompts(config.num_samples, config.seed)
     model = load_vllm(config.model_name, config.model_name, config.seed)
     tokenizer = model.get_tokenizer()
 
-    # 2) generate reasoning with bf16 model
     log_time = time.perf_counter()
     outputs = generate_vllm(model, prompts, config.max_generation_len)
     print(f"generated {len(outputs)} output_len {mean(len(output.token_ids) for output in outputs):.0f} time {format_duration(time.perf_counter() - log_time)}")
 
-    # 3) save prompt and reasoning as calibration data
     input_ids = []
     for prompt, output in zip(prompts, outputs):
         prompt_ids = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], add_generation_prompt=True, enable_thinking=True, return_tensors="pt")["input_ids"][0]

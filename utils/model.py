@@ -4,6 +4,7 @@ from vllm import LLM, SamplingParams  # type: ignore
 from vllm.outputs import CompletionOutput  # type: ignore
 
 THINK_END = "</think>"
+# qwen3 recommended setting for thinking mode
 TEMPERATURE = 0.6
 TOP_P = 0.95
 TOP_K = 20

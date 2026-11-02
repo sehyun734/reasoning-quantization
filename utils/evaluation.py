@@ -4,14 +4,16 @@ import math_verify
 from vllm.outputs import CompletionOutput  # type: ignore
 from vllm.tokenizers import TokenizerLike  # type: ignore
 
+from utils.model import THINK_END
+
 BOXED_CHOICE_PATTERN = re.compile(r"\\boxed\{(?:\\text\{)?([A-D])\b")
 
 
 def split_outputs(
     outputs: list[CompletionOutput],
     tokenizer: TokenizerLike,
-    think_end_id: int,
 ) -> dict:
+    think_end_id = tokenizer.convert_tokens_to_ids(THINK_END)
     thinks = []
     responses = []
     think_lens = []
@@ -39,9 +41,8 @@ def evaluate_math500(
     outputs: list[CompletionOutput],
     answers: list[str],
     tokenizer: TokenizerLike,
-    think_end_id: int,
 ) -> dict:
-    split = split_outputs(outputs, tokenizer, think_end_id)
+    split = split_outputs(outputs, tokenizer)
     parsed = [None if response is None else math_verify.parse(response) for response in split["responses"]]
     corrects = [prediction is not None and math_verify.verify(math_verify.parse(f"${answer}$"), prediction) for prediction, answer in zip(parsed, answers)]
     return {
@@ -56,9 +57,8 @@ def evaluate_mmlu_redux(
     outputs: list[CompletionOutput],
     answers: list[str],
     tokenizer: TokenizerLike,
-    think_end_id: int,
 ) -> dict:
-    split = split_outputs(outputs, tokenizer, think_end_id)
+    split = split_outputs(outputs, tokenizer)
     predictions = []
     for response in split["responses"]:
         choices = [] if response is None else BOXED_CHOICE_PATTERN.findall(response)
