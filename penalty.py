@@ -72,9 +72,9 @@ class Config:
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
+    seed: int = 0
     penalty: float = 1.0
     max_generation_len: int = 32768
-    seed: int = 0
 
 
 def main() -> None:

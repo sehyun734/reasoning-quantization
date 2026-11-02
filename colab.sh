@@ -16,7 +16,7 @@ mkdir -p "$(dirname "$log_path")"
 trap 'rm -f "$tar_path"; colab stop -s "$session" || true' EXIT
 
 # start colab session
-colab new -s "$session" --gpu A100
+colab new -s "$session" --gpu G4
 # upload project without local-only files
 COPYFILE_DISABLE=1 tar -czf "$tar_path" --exclude .venv --exclude __pycache__ --exclude logs .
 colab upload -s "$session" "$tar_path" content/project.tar.gz
@@ -33,7 +33,7 @@ proc = subprocess.Popen(
     # PYTHONPATH=. to import primitives
     # -u to disable output buffering
     ["bash", "-c", 'set -a && . ./.env && set +a && PYTHONPATH=. exec python -u "\$@"', "bash", *$argv],
-    # one stream so errors show up in order and in the log
+    # one stream, so errors show up in order and in the log
     stdout=subprocess.PIPE,
     stderr=subprocess.STDOUT,
     text=True,

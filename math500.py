@@ -26,7 +26,7 @@ class Config:
     high_entropy_weight: float = 0.0
     hidden_weight: float = 0.0
     loss: Literal["kl", "ce", "cakld"] = "kl"
-    scale_learning_rate: float = 0.0
+    scale_lr: float = 0.0
     num_epochs: int = 1
     lr_schedule: Literal["constant", "cosine"] = "constant"
     max_generation_len: int = 32768
@@ -36,7 +36,7 @@ def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
     if config.method == "qat":
-        target = make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs, config.high_entropy_weight)
+        target = make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_lr, config.lr_schedule, config.num_epochs, config.high_entropy_weight)
     else:
         target = make_target_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists("math500", target, file_name):

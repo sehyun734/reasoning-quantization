@@ -63,7 +63,7 @@ def quantize_weight(
     is_dead = hessian.diagonal() == 0
     weight[:, is_dead] = 0
     hessian.diagonal()[is_dead] = 1
-    # add small damping to diagonal so inverse stays stable
+    # add small damping to diagonal, so inverse stays stable
     hessian.diagonal().add_(damp_ratio * hessian.diagonal().mean())
     hessian_inv = torch.linalg.cholesky(torch.cholesky_inverse(torch.linalg.cholesky(hessian)), upper=True)
 

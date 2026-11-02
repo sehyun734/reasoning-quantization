@@ -19,10 +19,8 @@ def round_to_grid(
     zero: Tensor,
     num_bits: int,
 ) -> Tensor:
-    # previously whole quantized weight was detached
-    # so backward saw q = w and scale got no gradient
-    # now only round is detached
-    # then q = round(w/s) * s keeps scale, and scale can train
+    # detach only round, not whole quantized weight
+    # so q = round(w/s) * s keeps gradient to scale, and scale can train (lsq)
     level = weight / scale
     level = level + (torch.round(level) - level).detach() + zero
     # torch.clamp gives zero gradient on end levels too (0 and 15 for 4 bits)

@@ -35,7 +35,6 @@ class Config:
     on_policy: bool = False
     max_generation_len: int = 8192
     # cut prompt + reasoning to this length
-    # calibration config
     max_sequence_len: int = 8192
     num_train_samples: int = 2048
     # extra kl weight on positions with high bf16 entropy
@@ -53,7 +52,7 @@ class Config:
     lr: float = 1e-4
     # train scale too (not only weight), like lsq
     # 0.0 keeps gptq scale fixed
-    scale_learning_rate: float = 0.0
+    scale_lr: float = 0.0
     # lr schedule and epochs
     # NOTE: models in qat.png all use constant lr and 1 epoch
     num_epochs: int = 1
@@ -191,12 +190,12 @@ def main() -> None:
     ste_linears = [ste_linear for _, _, ste_linear in replaced]
     for ste_linear in ste_linears:
         ste_linear.weight.requires_grad_(True)
-        ste_linear.scale.requires_grad_(config.scale_learning_rate > 0)
+        ste_linear.scale.requires_grad_(config.scale_lr > 0)
 
     # scale has its own lr (lsq only), and schedule spans all epochs
     parameters = [{"params": [ste_linear.weight for ste_linear in ste_linears], "lr": config.lr}]
-    if config.scale_learning_rate > 0:
-        parameters.append({"params": [ste_linear.scale for ste_linear in ste_linears], "lr": config.scale_learning_rate})
+    if config.scale_lr > 0:
+        parameters.append({"params": [ste_linear.scale for ste_linear in ste_linears], "lr": config.scale_lr})
     optimizer = AdamW(parameters, weight_decay=0)
     num_batches = math.ceil(len(samples) / config.batch_size)
     num_steps = config.num_epochs * num_batches
@@ -274,7 +273,7 @@ def main() -> None:
             parent_name, child_name = name.rsplit(".", 1)
             setattr(model.model.layers.get_submodule(parent_name), child_name, module)
     model.to(torch.bfloat16)
-    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs, config.high_entropy_weight), model)
+    save_quantized(make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_lr, config.lr_schedule, config.num_epochs, config.high_entropy_weight), model)
 
 
 if __name__ == "__main__":

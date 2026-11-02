@@ -41,10 +41,10 @@ class Config:
     num_bits: int = 4
     group_size: int = 128
     num_samples: int = 128
+    seed: int = 0
     route_ratio: float = 0.2
     route: Literal["high", "low", "random"] = "high"
     max_generation_len: int = 32768
-    seed: int = 0
 
 
 def merge(
@@ -79,11 +79,9 @@ def merge(
     print(f"merged {len(weights)} tensors num_hidden_layers {model_config['num_hidden_layers']}")
 
 
-# vllm speeds up forward with torch.compile
-# each step, tokens of all problems being generated are joined into one row for forward
-# so token count changes every step
-# but by default each new token count triggers recompile
-# so use dynamic_arg_dims to mark which input tensor dims can change, which prevents recompile
+# vllm compiles forward with torch.compile
+# all running problems share one row, so token count changes every step
+# by default each new count recompiles, so dynamic_arg_dims marks dims that can change
 @support_torch_compile(dynamic_arg_dims={"input_ids": 0, "positions": -1, "intermediate_tensors": 0, "inputs_embeds": 0})
 class MergedQwen3Model(Qwen2Model):
     def __init__(
@@ -153,7 +151,7 @@ class RoutedQwen3ForCausalLM(Module):
         bf16_hiddens, quantized_hiddens = hidden_states.chunk(2, dim=-1)
         bf16_logits = self.logits_processor(self.lm_head, bf16_hiddens.contiguous())
         quantized_logits = self.logits_processor(self.lm_head, quantized_hiddens.contiguous())
-        # route each position to bf16 with route_ratio probability
+        # random routes each position with route_ratio probability
         if self.config.route == "random":
             is_routed = torch.rand(len(hidden_states), device=hidden_states.device) < self.config.route_ratio
         else:
@@ -181,14 +179,14 @@ def main() -> None:
     if result_exists("math500", target, file_name):
         print(f"{target} already evaluated")
         return
-    # bf16 entropy from teacher forcing on bf16 reasoning it answered correctly
+    # threshold from bf16 entropy in teacher forcing (seed 0), so it is set before generation
     entropy = load_tensors("teacher_forcing", quantized_path, "seed=0")["entropy"]
     entropy_threshold = None
     if config.route == "high":
         entropy_threshold = entropy.quantile(1 - config.route_ratio).item()
     elif config.route == "low":
         entropy_threshold = entropy.quantile(config.route_ratio).item()
-    print(f"entropy_threshold {entropy_threshold}")
+    print(f"entropy threshold {entropy_threshold}")
     samples = load_math500()
 
     # register_model only works in this process, so run vllm engine here too

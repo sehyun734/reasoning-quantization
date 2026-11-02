@@ -29,7 +29,7 @@ class Config:
     high_entropy_weight: float = 0.0
     hidden_weight: float = 0.0
     loss: Literal["kl", "ce", "cakld"] = "kl"
-    scale_learning_rate: float = 0.0
+    scale_lr: float = 0.0
     num_epochs: int = 1
     lr_schedule: Literal["constant", "cosine"] = "constant"
     dataset: Literal["math500", "mmlu_redux"] = "math500"
@@ -51,7 +51,7 @@ def main() -> None:
     file_name = f"seed={config.seed}"
     entry_name = "teacher_forcing" if config.dataset == "math500" else f"teacher_forcing_{config.dataset}"
     if config.method == "qat":
-        quantized_path = make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_learning_rate, config.lr_schedule, config.num_epochs, config.high_entropy_weight)
+        quantized_path = make_qat_path(config.model_name, config.num_bits, config.group_size, config.qat_num_samples, config.loss, config.hidden_weight, config.on_policy, config.scale_lr, config.lr_schedule, config.num_epochs, config.high_entropy_weight)
     else:
         quantized_path = make_quantized_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists(entry_name, quantized_path, file_name, "safetensors"):
@@ -65,7 +65,7 @@ def main() -> None:
         prompts = [prompt for prompt, _ in load_mmlu_redux(config.num_per_subject, config.seed)]
     result = load_result(config.dataset, f"bf16/{config.model_name}", file_name)
 
-    # use only bf16 reasoning on problems which it answers correctly
+    # use only bf16 reasoning on problems it got right
     samples = []
     for prompt, think, correct in zip(prompts, result["thinks"], result["corrects"]):
         if correct:

@@ -24,7 +24,7 @@ def load_numina_prompts(
     dataset = load_dataset("AI-MO/NuminaMath-1.5", split="train").shuffle(seed=seed)
     prompts = []
     for row in dataset:
-        # skip synthetic problems to avoid overlap with math500
+        # skip synthetic problems, so they don't overlap with math500
         # only word problems that have one boxed answer
         # and only valid, complete problems
         if row["synthetic"] or (row["question_type"] != "math-word-problem") or (row["problem_is_valid"] != "Yes"):
@@ -60,7 +60,7 @@ def load_mmlu_redux(
 ) -> list[tuple[str, str]]:
     samples = []
     for subject in get_dataset_config_names("edinburgh-dawg/mmlu-redux-2.0"):
-        # skip math subjects (already covered by math500)
+        # math500 already covers math, so skip math subjects
         if subject in MMLU_MATH_SUBJECTS:
             continue
         dataset = load_dataset("edinburgh-dawg/mmlu-redux-2.0", subject, split="test").filter(lambda row: row["error_type"] == "ok").shuffle(seed=seed)

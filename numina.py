@@ -30,7 +30,7 @@ def main() -> None:
     outputs = generate_vllm(model, prompts, config.max_generation_len, config.seed)
     print(f"generated {len(outputs)} output_len {mean(len(output.token_ids) for output in outputs):.0f} time {format_duration(time.perf_counter() - log_time)}")
 
-    # save prompt + reasoning as calibration data
+    # save prompt + reasoning as calibration and qat data
     input_ids = []
     for prompt, output in zip(prompts, outputs):
         prompt_ids = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], add_generation_prompt=True, enable_thinking=True, return_tensors="pt")["input_ids"][0]

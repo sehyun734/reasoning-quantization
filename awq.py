@@ -27,8 +27,7 @@ class Config:
     # which numina data to use as calibration
     num_samples: int = 128
     max_generation_len: int = 2048
-    # NOTE: saved awq model and results on hf hub used uncut calibration
-    #       so accuracy may differ, but only very slightly
+    # NOTE: saved awq model used uncut calibration, so results may differ very slightly
     max_sequence_len: int = 2048
     seed: int = 0
 
@@ -117,7 +116,7 @@ def find_smooth(
     num_grid: int,
 ) -> Tensor:
     # compare whole layer output, not each sub-module output like original awq
-    # simpler and works the same way for every group
+    # so it is simpler and same for every group
     outputs = forward_layer(layer, inputs)
     weights = [linear.weight.clone() for linear in linears]
 
@@ -147,7 +146,7 @@ def find_clip(
 ) -> Tensor:
     groups = (weight.float() * smooth).reshape(weight.shape[0], -1, group_size)
     num_groups = groups.shape[1]
-    # apply smooth to hessian so it becomes (x/s) @ (x/s)^T
+    # apply smooth to hessian, so it becomes (x/s) @ (x/s)^T
     smoothed_hessian = hessian / smooth[:, None] / smooth[None, :]
     # keep only diagonal block of each group
     # clip is picked per group, so ignore cross-group terms outside these blocks
@@ -162,9 +161,9 @@ def find_clip(
         scale, zero = find_grid(groups.clamp(-clip_value[..., None], clip_value[..., None]), num_bits)
         quantized = round_to_grid(groups, scale[..., None], zero[..., None], num_bits)
         delta = quantized - groups
-        # output error on row o caused by quantization error of one group g
+        # output error on row o from quantization error of group g
         # other groups (not only g) also affect row o
-        # but ignore cross-group terms so each group's clip can be searched independently
+        # but ignore cross-group terms, so each group's clip is searched alone
         error = torch.einsum("ogi,gij,ogj->og", delta, hessian_blocks, delta)
         # keep best clip separately for each row and group
         is_better = error < best_error
