@@ -4,6 +4,10 @@ from vllm import LLM, SamplingParams  # type: ignore
 from vllm.outputs import CompletionOutput  # type: ignore
 
 THINK_END = "</think>"
+# qwen3's recommended settings for thinking mode
+TEMPERATURE = 0.6
+TOP_P = 0.95
+TOP_K = 20
 
 
 def load_model(
@@ -32,7 +36,6 @@ def generate_vllm(
     logit_bias: dict[int, float] | None = None,
 ) -> list[CompletionOutput]:
     messages = [[{"role": "user", "content": prompt}] for prompt in prompts]
-    # qwen3's recommended settings for thinking mode
-    sampling_params = SamplingParams(temperature=0.6, top_p=0.95, top_k=20, max_tokens=max_generation_len, seed=seed, logit_bias=logit_bias)
+    sampling_params = SamplingParams(temperature=TEMPERATURE, top_p=TOP_P, top_k=TOP_K, max_tokens=max_generation_len, seed=seed, logit_bias=logit_bias)
     outputs = model.chat(messages, sampling_params, use_tqdm=True, chat_template_kwargs={"enable_thinking": True})
     return [output.outputs[0] for output in outputs]

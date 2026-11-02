@@ -11,7 +11,7 @@ from transformers import PreTrainedModel
 
 from primitives.dataset import load_math500, load_mmlu_redux
 from primitives.hub import download_model, load_result, result_exists, save_tensors
-from primitives.model import load_model
+from primitives.model import TEMPERATURE, TOP_K, TOP_P, load_model
 from primitives.paths import make_qat_path, make_quantized_path
 from primitives.utils import format_duration, format_memory
 
@@ -43,6 +43,15 @@ def get_think_hiddens(
     prompt_len: int,
 ) -> Tensor:
     return model.model(input_ids=input_ids[None].to(model.device)).last_hidden_state[0, prompt_len - 1 : -1]
+
+
+def get_sampling_probs(
+    logits: Tensor,
+) -> Tensor:
+    top_logits, top_ids = (logits / TEMPERATURE).topk(TOP_K, dim=-1)
+    top_probs = top_logits.softmax(dim=-1)
+    top_probs = torch.where(top_probs.cumsum(dim=-1) - top_probs < TOP_P, top_probs, 0)
+    return torch.zeros_like(logits).scatter(-1, top_ids, top_probs / top_probs.sum(dim=-1, keepdim=True))
 
 
 @torch.no_grad()
@@ -82,8 +91,10 @@ def main() -> None:
         bf16_hiddens = get_think_hiddens(bf16_model, input_ids, len(prompt_ids))
         hiddens = get_think_hiddens(model, input_ids, len(prompt_ids))
         for start in range(0, len(think_ids), config.chunk_len):
-            bf16_logprobs = log_softmax(bf16_model.lm_head(bf16_hiddens[start : start + config.chunk_len]).float(), dim=-1)
-            logprobs = log_softmax(model.lm_head(hiddens[start : start + config.chunk_len]).float(), dim=-1)
+            bf16_logits = bf16_model.lm_head(bf16_hiddens[start : start + config.chunk_len]).float()
+            logits = model.lm_head(hiddens[start : start + config.chunk_len]).float()
+            bf16_logprobs = log_softmax(bf16_logits, dim=-1)
+            logprobs = log_softmax(logits, dim=-1)
             bf16_probs = bf16_logprobs.exp()
             bf16_top1 = bf16_logprobs.argmax(dim=-1)
             tensors["entropy"].append(-(bf16_probs * bf16_logprobs).sum(dim=-1).cpu())
@@ -94,6 +105,8 @@ def main() -> None:
             tensors["bf16_prob"].append(bf16_probs.gather(-1, bf16_top1[:, None])[:, 0].cpu())
             # probability quantized model gives to bf16 top1 token, not its own top1
             tensors["prob"].append(logprobs.gather(-1, bf16_top1[:, None])[:, 0].exp().cpu())
+            tensors["change_prob"].append(0.5 * (get_sampling_probs(bf16_logits) - get_sampling_probs(logits)).abs().sum(dim=-1).cpu())
+            tensors["logit_error"].append((logits - bf16_logits).gather(-1, bf16_logits.topk(TOP_K, dim=-1).indices).std(dim=-1).cpu())
         tensors["think_ids"].append(think_ids)
 
         if (step + 1) % 50 == 0:
@@ -102,7 +115,7 @@ def main() -> None:
             torch.cuda.reset_peak_memory_stats()
 
     tensors = {name: torch.cat(values) for name, values in tensors.items()}
-    print(f"{quantized_path} entropy {tensors['entropy'].mean():.4f} kl {tensors['kl'].mean():.4f} top1 mismatch {(tensors['bf16_top1'] != tensors['top1']).float().mean():.2%}")
+    print(f"{quantized_path} entropy {tensors['entropy'].mean():.4f} kl {tensors['kl'].mean():.4f} top1 mismatch {(tensors['bf16_top1'] != tensors['top1']).float().mean():.2%} change prob {tensors['change_prob'].mean():.2%} logit error {tensors['logit_error'].mean():.4f}")
     save_tensors(entry_name, quantized_path, file_name, tensors)
 
 
