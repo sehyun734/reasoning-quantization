@@ -8,7 +8,7 @@ from simple_parsing import parse
 
 from utils.hub import load_result, result_exists
 from utils.metrics import get_words
-from utils.paths import make_target_path
+from utils.paths import make_bf16_path, make_target_path
 from utils.plot import METHOD_COLORS, get_words_figsize, plot_words, save_figure
 
 
@@ -33,7 +33,7 @@ def count_word_rates(
 def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
-    bf16_result = load_result("math500", make_target_path("bf16", config.model_name, config.num_bits, config.group_size, config.num_samples), file_name)
+    bf16_result = load_result("math500", make_bf16_path(config.model_name), file_name)
     results = {}
     for method in ["gptq", "awq", "mxfp4"]:
         target = make_target_path(method, config.model_name, config.num_bits, config.group_size, config.num_samples)

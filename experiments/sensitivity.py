@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from statistics import mean
 import time
@@ -15,7 +16,7 @@ from utils.format import format_duration
 from utils.hub import load_result, result_exists, save_result, save_tensors
 from utils.metrics import get_loop_ratio
 from utils.model import TEMPERATURE, TOP_K, TOP_P, get_prompt_ids, get_think_hiddens, get_think_ids, load_model, load_vllm
-from utils.paths import make_sensitivity_path
+from utils.paths import make_bf16_path, make_sensitivity_path
 
 
 @dataclass
@@ -51,9 +52,9 @@ def main() -> None:
     model = load_model(config.model_name)
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
     problems = load_math500()
-    bf16_result = load_result("math500", f"bf16/{config.model_name}", file_name)
+    bf16_result = load_result("math500", make_bf16_path(config.model_name), file_name)
 
-    # 1) use bf16 reasoning of correctly solved problems only
+    # 1) use only bf16 reasoning on correctly solved problems
     samples = []
     for problem_index, ((prompt, answer), think, correct) in enumerate(zip(problems, bf16_result["thinks"], bf16_result["corrects"])):
         if correct:
@@ -101,19 +102,19 @@ def main() -> None:
                 probs = torch.where(is_excluded, 0, sample_top_probs[position])
                 # multinomial takes unnormalized weights, so no renormalizing after dropping
                 swapped_token_id = sample_top_ids[position][torch.multinomial(probs, 1, generator=generator)].item()
-                swaps.append({"problem_index": problem_index, "answer": answer, "entropy_bin": bin_index, "position": position, "entropy": sample_entropies[position].item(), "original_token_id": original_token_id, "swapped_token_id": swapped_token_id, "prompt_ids": prompt_ids.tolist(), "think_ids": think_ids[:position].tolist()})
+                swaps.append({"problem_index": problem_index, "answer": answer, "entropy_bin": bin_index, "position": position, "entropy": sample_entropies[position].item(), "original_token_id": original_token_id, "swapped_token_id": swapped_token_id, "prompt_ids": prompt_ids.tolist(), "prefix_ids": think_ids[:position].tolist()})
     print(f"swaps {len(swaps)}")
 
     model = load_vllm(config.model_name, config.model_name, config.seed)
     log_time = time.perf_counter()
     # 5) continue from original and swapped token with bf16
     # 380 problems * 5 bins * 2 conditions * 4 continuations = 15200 generation
-    input_ids = [swap["prompt_ids"] + swap["think_ids"] + [swap[f"{condition}_token_id"]] for swap in swaps for condition in ["original", "swapped"]]
-    max_generation_lens = [config.max_generation_len - len(swap["think_ids"]) - 1 for swap in swaps for _ in range(2)]
+    input_ids = [swap["prompt_ids"] + swap["prefix_ids"] + [swap[f"{condition}_token_id"]] for swap in swaps for condition in ["original", "swapped"]]
+    max_generation_lens = [config.max_generation_len - len(swap["prefix_ids"]) - 1 for swap in swaps for _ in range(2)]
     outputs = generate_continuations(model, input_ids, max_generation_lens, config.num_continuations)
 
     # 6) score original and swapped
-    result = {name: [] for name in ["problem_indices", "entropy_bins", "positions", "entropies", "original_token_ids", "swapped_token_ids", "original_corrects", "original_think_lens", "original_loop_ratios", "swapped_corrects", "swapped_think_lens", "swapped_loop_ratios"]}
+    result = defaultdict(list)
     continuation_ids = []
     for swap_index, swap in enumerate(swaps):
         result["problem_indices"].append(swap["problem_index"])
@@ -126,7 +127,7 @@ def main() -> None:
             continuations = outputs[2 * swap_index + offset].outputs
             continuation_ids += [torch.tensor(continuation.token_ids, dtype=torch.int32) for continuation in continuations]
             evaluated = evaluate_math500(continuations, [swap["answer"]] * len(continuations), tokenizer)
-            prefix_ids = swap["think_ids"] + [swap[f"{condition}_token_id"]]
+            prefix_ids = swap["prefix_ids"] + [swap[f"{condition}_token_id"]]
             thinks = [tokenizer.decode(prefix_ids + list(continuation.token_ids)[:think_len], skip_special_tokens=True) for continuation, think_len in zip(continuations, evaluated["think_lens"])]
             result[f"{condition}_corrects"].append(evaluated["corrects"])
             result[f"{condition}_think_lens"].append([len(prefix_ids) + think_len for think_len in evaluated["think_lens"]])

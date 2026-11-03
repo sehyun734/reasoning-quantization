@@ -31,7 +31,7 @@ def main() -> None:
         if result_exists("teacher_forcing/math500", quantized_path, file_name, "safetensors"):
             results[method] = load_tensors("teacher_forcing/math500", quantized_path, file_name)
     panels = [
-        ("logit error std over bf16 top-20", lambda result: result["logit_std_error"], None, StrMethodFormatter("{x:.2f}")),
+        ("logit std error over bf16 top-20", lambda result: result["logit_std_error"], None, StrMethodFormatter("{x:.2f}")),
         ("1 - prob of bf16 top-1 token", lambda result: 1 - result["quantized_prob"], lambda result: 1 - result["bf16_prob"], PercentFormatter(1)),
         ("prob of sampling different token", lambda result: result["flip_prob"], None, PercentFormatter(1)),
     ]
@@ -53,7 +53,7 @@ def main() -> None:
         ax.xaxis.set_major_formatter(PercentFormatter(1, decimals=0))
         ax.yaxis.set_major_formatter(formatter)
 
-    fig.suptitle(f"{config.model_name} math500 teacher forcing flip by entropy {file_name}, num_bins={config.num_bins}, high_entropy_ratio={config.high_entropy_ratio:g}")
+    fig.suptitle(f"{config.model_name} math500 teacher forcing flip {file_name}, num_bins={config.num_bins}, high_entropy_ratio={config.high_entropy_ratio:g}")
     handles = [Line2D([], [], color=METHOD_COLORS[method], marker="o", markersize=3, label=method) for method in ["bf16", *results]]
     handles.append(Line2D([], [], color=ENTROPY_COLORS["high entropy"], linestyle="--", label="high entropy"))
     fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))

@@ -27,7 +27,7 @@ def main() -> None:
 
     log_time = time.perf_counter()
     outputs = generate_vllm(model, prompts, config.max_generation_len)
-    print(f"generated {len(outputs)} output_len {mean(len(output.token_ids) for output in outputs):.0f} time {format_duration(time.perf_counter() - log_time)}")
+    print(f"generated {len(outputs)} output len {mean(len(output.token_ids) for output in outputs):.0f} time {format_duration(time.perf_counter() - log_time)}")
 
     input_ids = []
     for prompt, output in zip(prompts, outputs):

@@ -49,12 +49,12 @@ class Config:
 
 
 def merge(
-    bf16_path: str,
-    quantized_path: str,
+    bf16_dir: str,
+    quantized_dir: str,
     directory: str,
 ) -> None:
     # vllm can load one model only, so merge bf16 and quantized into one
-    model_config = json.loads((Path(quantized_path) / "config.json").read_text())
+    model_config = json.loads((Path(quantized_dir) / "config.json").read_text())
     num_layers = model_config["num_hidden_layers"]
     model_config["architectures"] = [RoutedQwen3ForCausalLM.__name__]
     model_config["num_hidden_layers"] = 2 * num_layers
@@ -62,9 +62,9 @@ def merge(
     model_config["layer_types"] = model_config["layer_types"] * 2
 
     weights = {}
-    for file in sorted(Path(bf16_path).glob("model*.safetensors")):
+    for file in sorted(Path(bf16_dir).glob("model*.safetensors")):
         weights.update(load_file(file))
-    for file in sorted(Path(quantized_path).glob("model*.safetensors")):
+    for file in sorted(Path(quantized_dir).glob("model*.safetensors")):
         for name, tensor in load_file(file).items():
             match = re.fullmatch(r"model\.layers\.(\d+)\.(.+)", name)
             if match:
@@ -74,7 +74,7 @@ def merge(
 
     # save merged model locally
     (Path(directory) / "config.json").write_text(json.dumps(model_config, indent=2))
-    shutil.copy(Path(bf16_path) / "generation_config.json", Path(directory) / "generation_config.json")
+    shutil.copy(Path(bf16_dir) / "generation_config.json", Path(directory) / "generation_config.json")
     save_file(weights, Path(directory) / "model.safetensors")
     print(f"merged {len(weights)} tensors num_hidden_layers {model_config['num_hidden_layers']}")
 
@@ -202,7 +202,7 @@ def main() -> None:
     log_time = time.perf_counter()
     outputs = generate_vllm(model, [prompt for prompt, _ in problems], config.max_generation_len)
     result = evaluate_math500(outputs, [answer for _, answer in problems], tokenizer)
-    print(f"{target} accuracy {result['accuracy']:.2%} think_len {mean(result['think_lens']):.0f} truncated {mean(result['truncateds']):.2%} time {format_duration(time.perf_counter() - log_time)}")
+    print(f"{target} accuracy {result['accuracy']:.2%} think len {mean(result['think_lens']):.0f} truncated {mean(result['truncateds']):.2%} time {format_duration(time.perf_counter() - log_time)}")
     save_result("routing/math500", target, file_name, result)
 
 

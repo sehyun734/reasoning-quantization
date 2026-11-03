@@ -7,6 +7,12 @@ def make_numina_path(
     return f"numina/{target}/num_samples={num_samples},max_generation_len={max_generation_len},seed={seed}"
 
 
+def make_bf16_path(
+    model_name: str,
+) -> str:
+    return f"bf16/{model_name}"
+
+
 def make_mxfp4_path(
     model_name: str,
 ) -> str:
@@ -33,7 +39,7 @@ def make_target_path(
     num_samples: int,
 ) -> str:
     if method == "bf16":
-        return f"bf16/{model_name}"
+        return make_bf16_path(model_name)
     return make_quantized_path(method, model_name, num_bits, group_size, num_samples)
 
 
@@ -50,4 +56,4 @@ def make_sensitivity_path(
     num_bins: int,
     num_continuations: int,
 ) -> str:
-    return f"bf16/{model_name}/num_bins={num_bins},num_continuations={num_continuations}"
+    return f"{make_bf16_path(model_name)}/num_bins={num_bins},num_continuations={num_continuations}"

@@ -13,7 +13,7 @@ from utils.dataset import load_math500, load_mmlu_redux
 from utils.format import format_duration, format_memory
 from utils.hub import download_model, load_result, result_exists, save_tensors
 from utils.model import TEMPERATURE, TOP_K, TOP_P, get_prompt_ids, get_think_hiddens, get_think_ids, load_model
-from utils.paths import make_quantized_path
+from utils.paths import make_bf16_path, make_quantized_path
 
 
 @dataclass
@@ -47,10 +47,10 @@ def main() -> None:
     entry_name = f"teacher_forcing/{config.dataset}"
     quantized_path = make_quantized_path(config.method, config.model_name, config.num_bits, config.group_size, config.num_samples)
     if result_exists(entry_name, quantized_path, file_name, "safetensors"):
-        print(f"{quantized_path} already computed")
+        print(f"{quantized_path} already evaluated")
         return
-    prompts = [prompt for prompt, _ in (load_math500() if config.dataset == "math500" else load_mmlu_redux(config.num_per_subject))]
-    result = load_result(config.dataset, f"bf16/{config.model_name}", file_name)
+    problems = load_math500() if config.dataset == "math500" else load_mmlu_redux(config.num_per_subject)
+    bf16_result = load_result(config.dataset, make_bf16_path(config.model_name), file_name)
 
     tokenizer = AutoTokenizer.from_pretrained(config.model_name)
     bf16_model = load_model(config.model_name)
@@ -58,7 +58,7 @@ def main() -> None:
 
     # use only bf16 reasoning on correctly solved problems
     samples = []
-    for prompt, think, correct in zip(prompts, result["thinks"], result["corrects"]):
+    for (prompt, _), think, correct in zip(problems, bf16_result["thinks"], bf16_result["corrects"]):
         if correct:
             prompt_ids = get_prompt_ids(tokenizer, prompt)
             think_ids = get_think_ids(tokenizer, think)

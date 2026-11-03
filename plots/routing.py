@@ -10,10 +10,10 @@ from simple_parsing import parse
 from utils.dataset import load_math500
 from utils.hub import load_result, result_exists
 from utils.metrics import get_intermediate_answer_ratio, get_length_ratio, get_loop_ratio
-from utils.paths import make_quantized_path, make_routing_path, make_target_path
-from utils.plot import METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
+from utils.paths import make_bf16_path, make_quantized_path, make_routing_path
+from utils.plot import ENTROPY_COLORS, METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
 
-ROUTE_POSITION_COLORS = {"high": "tab:red", "low": "tab:blue", "random": "tab:purple"}
+ROUTE_POSITION_COLORS = {"high": ENTROPY_COLORS["high entropy"], "low": ENTROPY_COLORS["low entropy"], "random": "tab:purple"}
 ROUTE_POSITION_LABELS = {"high": "high entropy", "low": "low entropy", "random": "random"}
 ROUTE_RATIOS = [0.1, 0.2, 0.8]
 
@@ -30,7 +30,7 @@ class Config:
 def main() -> None:
     config = parse(Config)
     file_name = f"seed={config.seed}"
-    bf16_result = load_result("math500", make_target_path("bf16", config.model_name, config.num_bits, config.group_size, config.num_samples), file_name)
+    bf16_result = load_result("math500", make_bf16_path(config.model_name), file_name)
     answers = [answer for _, answer in load_math500()]
     panels = [
         ("accuracy", lambda result: result["accuracy"], "{x:.1%}"),
