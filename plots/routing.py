@@ -11,7 +11,7 @@ from utils.dataset import load_math500
 from utils.hub import load_result, result_exists
 from utils.metrics import get_intermediate_answer_ratio, get_length_ratio, get_loop_ratio
 from utils.paths import make_bf16_path, make_quantized_path, make_routing_path
-from utils.plot import ENTROPY_COLORS, METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, save_figure
+from utils.plot import ENTROPY_COLORS, METHOD_COLORS, fit_bar_width, get_figsize, get_panel_width, plot_bars, plot_baseline, save_figure, spread_baseline_labels
 
 ROUTE_POSITION_COLORS = {"high": ENTROPY_COLORS["high entropy"], "low": ENTROPY_COLORS["low entropy"], "random": "tab:purple"}
 ROUTE_POSITION_LABELS = {"high": "high entropy", "low": "low entropy", "random": "random"}
@@ -60,8 +60,7 @@ def main() -> None:
         for ax, (ylabel, get_value, text_format) in zip(axes, panels):
             line_values = [get_value(bf16_result), get_value(quantized_result)]
             for line_method, line_value in zip(["bf16", method], line_values):
-                ax.axhline(line_value, color=METHOD_COLORS[line_method], linestyle="--")
-                ax.annotate(text_format.format(x=line_value), (1, line_value), xycoords=("axes fraction", "data"), xytext=(4, 0), textcoords="offset points", va="center", fontsize=8, color=METHOD_COLORS[line_method])
+                plot_baseline(ax, line_value, METHOD_COLORS[line_method], text_format.format(x=line_value))
             groups = []
             for route_position, color in ROUTE_POSITION_COLORS.items():
                 values = [get_value(result) if result else math.nan for result in route_results[route_position]]
@@ -79,6 +78,7 @@ def main() -> None:
         handles += [Patch(color=color, label=ROUTE_POSITION_LABELS[route_position]) for route_position, color in ROUTE_POSITION_COLORS.items()]
         fig.legend(handles=handles, loc="outside lower center", ncol=len(handles))
         fit_bar_width(fig, axes)
+        spread_baseline_labels(fig, axes)
         save_figure(fig, config.model_name, f"routing_{method}")
 
 

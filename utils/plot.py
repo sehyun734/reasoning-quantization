@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 from matplotlib.axes import Axes
@@ -66,6 +67,16 @@ def plot_bars(
     ax.set_xlim(-slot_width / 2, (len(labels) - 0.5) * slot_width)
 
 
+def plot_baseline(
+    ax: Axes,
+    value: float,
+    color: str,
+    text: str,
+) -> None:
+    ax.axhline(value, color=color, linestyle="--")
+    ax.annotate(text, (1, value), xycoords=("axes fraction", "data"), xytext=(4, 0), textcoords="offset points", va="center", fontsize=8, color=color)
+
+
 def fit_bar_width(
     fig: Figure,
     axes: list[Axes],
@@ -75,6 +86,21 @@ def fit_bar_width(
         axes_width = sum(ax.get_window_extent().width for ax in axes) / fig.dpi
         num_bars = sum(ax.get_xlim()[1] - ax.get_xlim()[0] for ax in axes)
         fig.set_figwidth(fig.get_figwidth() + BAR_INCHES * num_bars - axes_width)
+
+
+def spread_baseline_labels(
+    fig: Figure,
+    axes: list[Axes],
+) -> None:
+    fig.canvas.draw()
+    for ax in axes:
+        labels = sorted([text for text in ax.texts if text.xycoords == ("axes fraction", "data")], key=lambda text: text.xy[1])
+        last_top = -math.inf
+        for label in labels:
+            box = label.get_window_extent()
+            shift = max(last_top - box.y0, 0)
+            label.xyann = (label.xyann[0], label.xyann[1] + shift * 72 / fig.dpi)
+            last_top = box.y1 + shift
 
 
 def get_words_figsize(
