@@ -58,5 +58,8 @@ def get_think_hiddens(
     input_ids: Tensor,
     prompt_len: int,
 ) -> Tensor:
+    # hidden at t predicts token t+1
+    # so keep from last prompt token to second last reasoning token
+    # e.g. input [p0, p1, p2, r0, r1, r2]
+    #      keep  [        p2, r0, r1    ] (each predicts r0, r1, r2)
     return model.model(input_ids=input_ids[None, :].to(model.device)).last_hidden_state[0, prompt_len - 1 : -1]
-

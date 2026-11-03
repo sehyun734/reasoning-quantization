@@ -22,7 +22,9 @@ from utils.paths import make_sensitivity_path
 class Config:
     model_name: str = "Qwen/Qwen3-0.6B"
     seed: int = 0
+    # number of entropy bins (e.g. 5 is 0~20%, 20~40%, ..., 80~100%)
     num_bins: int = 5
+    # continuations per condition, so result depends less on luck
     num_continuations: int = 4
     max_generation_len: int = 32768
     chunk_len: int = 2048
@@ -51,6 +53,7 @@ def main() -> None:
     problems = load_math500()
     bf16_result = load_result("math500", f"bf16/{config.model_name}", file_name)
 
+    # 1) use bf16 reasoning of correctly solved problems only
     samples = []
     for problem_index, ((prompt, answer), think, correct) in enumerate(zip(problems, bf16_result["thinks"], bf16_result["corrects"])):
         if correct:
@@ -58,6 +61,7 @@ def main() -> None:
             think_ids = get_think_ids(tokenizer, think)
             samples.append((problem_index, answer, prompt_ids, think_ids))
 
+    # 2) get bf16 entropy and top-k candidates at each reasoning position
     entropies = []
     top_ids = []
     top_probs = []
@@ -77,34 +81,40 @@ def main() -> None:
         top_probs.append(torch.cat(sample_top_probs))
     del model
     torch.cuda.empty_cache()
+    # 3) entropy boundaries over all positions (20%, 40%, 60%, 80%)
     entropy_thresholds = torch.cat(entropies).quantile(torch.linspace(0, 1, config.num_bins + 1)[1:-1])
     print(f"samples {len(samples)} positions {sum(map(len, entropies))} thresholds {[round(threshold, 4) for threshold in entropy_thresholds.tolist()]}")
 
+    # 4) pick position and token to change
     generator = torch.Generator().manual_seed(config.seed)
     special_ids = torch.tensor(list(tokenizer.added_tokens_decoder))
     interventions = []
     for (problem_index, answer, prompt_ids, think_ids), sample_entropies, sample_top_ids, sample_top_probs in zip(samples, entropies, top_ids, top_probs):
+        # 4-1) give each position its entropy bin (0~4), and pick one random position per bin
         entropy_bins = torch.bucketize(sample_entropies, entropy_thresholds)
         for bin_index in range(config.num_bins):
             candidates = (entropy_bins == bin_index).nonzero()[:, 0]
             for position in candidates[torch.randperm(len(candidates), generator=generator)[:1]].tolist():
+                # 4-2) drop original and special tokens, and sample one from remaining top-k by prob
                 original = think_ids[position].item()
                 is_excluded = (sample_top_ids[position] == original) | torch.isin(sample_top_ids[position], special_ids)
                 probs = torch.where(is_excluded, 0, sample_top_probs[position])
+                # multinomial takes unnormalized weights, so no renormalizing after dropping
                 changed = sample_top_ids[position][torch.multinomial(probs, 1, generator=generator)].item()
                 interventions.append({"problem": problem_index, "answer": answer, "bin": bin_index, "position": position, "entropy": sample_entropies[position].item(), "original": original, "changed": changed, "prompt_ids": prompt_ids.tolist(), "think_ids": think_ids[:position].tolist()})
     print(f"interventions {len(interventions)}")
 
     model = load_vllm(config.model_name, config.model_name, config.seed)
     log_time = time.perf_counter()
+    # 5) continue from original and changed token with bf16
+    # 380 problems * 5 bins * 2 conditions * 4 continuations = 15200 generation
     input_ids = [intervention["prompt_ids"] + intervention["think_ids"] + [intervention[condition]] for intervention in interventions for condition in ["original", "changed"]]
     max_generation_lens = [config.max_generation_len - len(intervention["think_ids"]) - 1 for intervention in interventions for _ in range(2)]
     outputs = generate_continuations(model, input_ids, max_generation_lens, config.num_continuations)
 
-    result = {name: [] for name in ["problems", "bins", "positions", "entropies", "original_tokens", "changed_tokens"]}
+    # 6) score original and changed
+    result = {name: [] for name in ["problems", "bins", "positions", "entropies", "original_tokens", "changed_tokens", "original_corrects", "original_think_lens", "original_loop_ratios", "changed_corrects", "changed_think_lens", "changed_loop_ratios"]}
     continuation_ids = []
-    for condition in ["original", "changed"]:
-        result.update({f"{condition}_corrects": [], f"{condition}_think_lens": [], f"{condition}_loop_ratios": []})
     for intervention_index, intervention in enumerate(interventions):
         result["problems"].append(intervention["problem"])
         result["bins"].append(intervention["bin"])
