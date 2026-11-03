@@ -63,15 +63,16 @@ def quantize_weight(
     is_dead = hessian.diagonal() == 0
     weight[:, is_dead] = 0
     hessian.diagonal()[is_dead] = 1
+
     # 2) damp diagonal, so inverse stays stable
     hessian.diagonal().add_(damp_ratio * hessian.diagonal().mean())
     hessian_inv = torch.linalg.cholesky(torch.cholesky_inverse(torch.linalg.cholesky(hessian)), upper=True)
 
+    # 3) quantize block by block, column by column
     quantized = torch.zeros_like(weight)
     scale = torch.zeros(weight.shape[0], weight.shape[1] // group_size, device=weight.device)
     zero = torch.zeros(weight.shape[0], weight.shape[1] // group_size, device=weight.device)
     error = torch.zeros(weight.shape[0], block_size, device=weight.device)
-    # 3) quantize block by block, column by column
     for start in range(0, weight.shape[1], block_size):
         end = min(start + block_size, weight.shape[1])
         for column in range(start, end):
@@ -79,11 +80,11 @@ def quantize_weight(
             # set grid when group starts, so it reflects compensation
             if column % group_size == 0:
                 scale[:, group], zero[:, group] = find_grid(weight[:, column : column + group_size], num_bits)
-            # 4) quantize column and compensate column's error to right columns in block
+            # 3-1) quantize column and compensate column's error to right columns in block
             quantized[:, column] = round_to_grid(weight[:, column], scale[:, group], zero[:, group], num_bits)
             error[:, column - start] = (weight[:, column] - quantized[:, column]) / hessian_inv[column, column]
             weight[:, column:end] -= torch.outer(error[:, column - start], hessian_inv[column, column:end])
-        # 5) compensate block's error to remaining columns after block
+        # 3-2) compensate block's error to remaining columns after block
         weight[:, end:] -= error[:, : end - start] @ hessian_inv[start:end, end:]
     return quantized, scale, zero
 

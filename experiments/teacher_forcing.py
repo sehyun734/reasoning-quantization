@@ -56,7 +56,7 @@ def main() -> None:
     bf16_model = load_model(config.model_name)
     quantized_model = load_model(download_model(quantized_path))
 
-    # use only bf16 reasoning on correctly solved problems
+    # 1) use only bf16 reasoning on correctly solved problems
     samples = []
     for (prompt, _), think, correct in zip(problems, bf16_result["thinks"], bf16_result["corrects"]):
         if correct:
@@ -65,6 +65,7 @@ def main() -> None:
             samples.append((prompt_ids, think_ids))
     print(f"samples {len(samples)} positions {sum(len(think_ids) for _, think_ids in samples)}")
 
+    # 2) compare bf16 and quantized at each reasoning position
     tensors = defaultdict(list)
     log_time = time.perf_counter()
     torch.cuda.reset_peak_memory_stats()
@@ -85,11 +86,11 @@ def main() -> None:
             tensors["bf16_top1"].append(bf16_top1.cpu())
             tensors["quantized_top1"].append(quantized_logprobs.argmax(dim=-1).cpu())
             tensors["bf16_prob"].append(bf16_probs.gather(-1, bf16_top1[:, None])[:, 0].cpu())
-            # quantized model's prob of bf16 top1 token, not its own top1
+            # quantized model's prob of bf16 top-1 token, not its own top-1
             tensors["quantized_prob"].append(quantized_logprobs.gather(-1, bf16_top1[:, None])[:, 0].exp().cpu())
-            # gap between actual sampling probs, so prob that sampled token differs
+            # half of L1 gap between sampling probs is prob that sampled token differs
             tensors["flip_prob"].append(0.5 * (get_sampling_probs(bf16_logits) - get_sampling_probs(quantized_logits)).abs().sum(dim=-1).cpu())
-            # how unevenly quantization shifts each logit, so std
+            # use std to check how unevenly quantization shifts bf16 top-k logits
             tensors["logit_std_error"].append((quantized_logits - bf16_logits).gather(-1, bf16_logits.topk(TOP_K, dim=-1).indices).std(dim=-1).cpu())
         tensors["think_ids"].append(think_ids)
 

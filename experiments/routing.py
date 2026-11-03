@@ -72,7 +72,6 @@ def merge(
             else:
                 assert torch.equal(tensor, weights[name]), name
 
-    # save merged model locally
     (Path(directory) / "config.json").write_text(json.dumps(model_config, indent=2))
     shutil.copy(Path(bf16_dir) / "generation_config.json", Path(directory) / "generation_config.json")
     save_file(weights, Path(directory) / "model.safetensors")
@@ -199,6 +198,7 @@ def main() -> None:
         model = load_vllm(directory, config.model_name, config.seed, hf_overrides=hf_overrides)
     tokenizer = model.get_tokenizer()
 
+    # 3) generate and score with routed model
     log_time = time.perf_counter()
     outputs = generate_vllm(model, [prompt for prompt, _ in problems], config.max_generation_len)
     result = evaluate_math500(outputs, [answer for _, answer in problems], tokenizer)

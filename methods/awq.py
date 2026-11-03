@@ -161,8 +161,8 @@ def find_clip(
         scale, zero = find_grid(groups.clamp(-clip_value[..., None], clip_value[..., None]), num_bits)
         quantized = round_to_grid(groups, scale[..., None], zero[..., None], num_bits)
         delta = quantized - groups
-        # actually, other groups in row o also add to its error
-        # but ignore them, so each group's clip can be searched alone
+        # error of other groups in same row also affects output
+        # but ignore it, so each group's clip can be searched alone
         error = torch.einsum("ogi,gij,ogj->og", delta, hessian_blocks, delta)
         # keep best clip for each quantization group
         is_better = error < best_error

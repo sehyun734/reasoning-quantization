@@ -21,7 +21,6 @@ from utils.paths import make_bf16_path, make_sensitivity_path
 
 @dataclass
 class Config:
-    model_name: str = "Qwen/Qwen3-0.6B"
     seed: int = 0
     # number of entropy bins (e.g. 5 is 0~20%, 20~40%, ..., 80~100%)
     num_bins: int = 5
@@ -29,6 +28,8 @@ class Config:
     num_continuations: int = 4
     max_generation_len: int = 32768
     chunk_len: int = 2048
+    # model to swap tokens in
+    model_name: str = "Qwen/Qwen3-0.6B"
 
 
 def generate_continuations(
@@ -82,16 +83,17 @@ def main() -> None:
         top_probs.append(torch.cat(sample_top_probs))
     del model
     torch.cuda.empty_cache()
-    # 3) entropy boundaries over all positions (20%, 40%, 60%, 80%)
+
+    # 3) entropy boundaries over all positions (e.g. 20%, 40%, 60%, 80%)
     entropy_thresholds = torch.cat(entropies).quantile(torch.linspace(0, 1, config.num_bins + 1)[1:-1])
     print(f"samples {len(samples)} positions {sum(map(len, entropies))} thresholds {[round(threshold, 4) for threshold in entropy_thresholds.tolist()]}")
 
-    # 4) pick position and token to change
+    # 4) pick position and token to swap
     generator = torch.Generator().manual_seed(config.seed)
     special_ids = torch.tensor(list(tokenizer.added_tokens_decoder))
     swaps = []
     for (problem_index, answer, prompt_ids, think_ids), sample_entropies, sample_top_ids, sample_top_probs in zip(samples, entropies, top_ids, top_probs):
-        # 4-1) give each position its entropy bin (0~4), and pick one random position per bin
+        # 4-1) give each position its entropy bin (e.g. 0~4), and pick one random position per bin
         entropy_bins = torch.bucketize(sample_entropies, entropy_thresholds)
         for bin_index in range(config.num_bins):
             candidates = (entropy_bins == bin_index).nonzero()[:, 0]
@@ -105,10 +107,9 @@ def main() -> None:
                 swaps.append({"problem_index": problem_index, "answer": answer, "entropy_bin": bin_index, "position": position, "entropy": sample_entropies[position].item(), "original_token_id": original_token_id, "swapped_token_id": swapped_token_id, "prompt_ids": prompt_ids.tolist(), "prefix_ids": think_ids[:position].tolist()})
     print(f"swaps {len(swaps)}")
 
+    # 5) continue from original and swapped token with bf16
     model = load_vllm(config.model_name, config.model_name, config.seed)
     log_time = time.perf_counter()
-    # 5) continue from original and swapped token with bf16
-    # 380 problems * 5 bins * 2 conditions * 4 continuations = 15200 generation
     input_ids = [swap["prompt_ids"] + swap["prefix_ids"] + [swap[f"{condition}_token_id"]] for swap in swaps for condition in ["original", "swapped"]]
     max_generation_lens = [config.max_generation_len - len(swap["prefix_ids"]) - 1 for swap in swaps for _ in range(2)]
     outputs = generate_continuations(model, input_ids, max_generation_lens, config.num_continuations)
