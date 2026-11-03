@@ -88,7 +88,7 @@ def main() -> None:
     # 4) pick position and token to change
     generator = torch.Generator().manual_seed(config.seed)
     special_ids = torch.tensor(list(tokenizer.added_tokens_decoder))
-    interventions = []
+    swaps = []
     for (problem_index, answer, prompt_ids, think_ids), sample_entropies, sample_top_ids, sample_top_probs in zip(samples, entropies, top_ids, top_probs):
         # 4-1) give each position its entropy bin (0~4), and pick one random position per bin
         entropy_bins = torch.bucketize(sample_entropies, entropy_thresholds)
@@ -96,50 +96,50 @@ def main() -> None:
             candidates = (entropy_bins == bin_index).nonzero()[:, 0]
             for position in candidates[torch.randperm(len(candidates), generator=generator)[:1]].tolist():
                 # 4-2) drop original and special tokens, and sample one from remaining top-k by prob
-                original = think_ids[position].item()
-                is_excluded = (sample_top_ids[position] == original) | torch.isin(sample_top_ids[position], special_ids)
+                original_token_id = think_ids[position].item()
+                is_excluded = (sample_top_ids[position] == original_token_id) | torch.isin(sample_top_ids[position], special_ids)
                 probs = torch.where(is_excluded, 0, sample_top_probs[position])
                 # multinomial takes unnormalized weights, so no renormalizing after dropping
-                changed = sample_top_ids[position][torch.multinomial(probs, 1, generator=generator)].item()
-                interventions.append({"problem": problem_index, "answer": answer, "bin": bin_index, "position": position, "entropy": sample_entropies[position].item(), "original": original, "changed": changed, "prompt_ids": prompt_ids.tolist(), "think_ids": think_ids[:position].tolist()})
-    print(f"interventions {len(interventions)}")
+                swapped_token_id = sample_top_ids[position][torch.multinomial(probs, 1, generator=generator)].item()
+                swaps.append({"problem_index": problem_index, "answer": answer, "entropy_bin": bin_index, "position": position, "entropy": sample_entropies[position].item(), "original_token_id": original_token_id, "swapped_token_id": swapped_token_id, "prompt_ids": prompt_ids.tolist(), "think_ids": think_ids[:position].tolist()})
+    print(f"swaps {len(swaps)}")
 
     model = load_vllm(config.model_name, config.model_name, config.seed)
     log_time = time.perf_counter()
-    # 5) continue from original and changed token with bf16
+    # 5) continue from original and swapped token with bf16
     # 380 problems * 5 bins * 2 conditions * 4 continuations = 15200 generation
-    input_ids = [intervention["prompt_ids"] + intervention["think_ids"] + [intervention[condition]] for intervention in interventions for condition in ["original", "changed"]]
-    max_generation_lens = [config.max_generation_len - len(intervention["think_ids"]) - 1 for intervention in interventions for _ in range(2)]
+    input_ids = [swap["prompt_ids"] + swap["think_ids"] + [swap[f"{condition}_token_id"]] for swap in swaps for condition in ["original", "swapped"]]
+    max_generation_lens = [config.max_generation_len - len(swap["think_ids"]) - 1 for swap in swaps for _ in range(2)]
     outputs = generate_continuations(model, input_ids, max_generation_lens, config.num_continuations)
 
-    # 6) score original and changed
-    result = {name: [] for name in ["problems", "bins", "positions", "entropies", "original_tokens", "changed_tokens", "original_corrects", "original_think_lens", "original_loop_ratios", "changed_corrects", "changed_think_lens", "changed_loop_ratios"]}
+    # 6) score original and swapped
+    result = {name: [] for name in ["problem_indices", "entropy_bins", "positions", "entropies", "original_token_ids", "swapped_token_ids", "original_corrects", "original_think_lens", "original_loop_ratios", "swapped_corrects", "swapped_think_lens", "swapped_loop_ratios"]}
     continuation_ids = []
-    for intervention_index, intervention in enumerate(interventions):
-        result["problems"].append(intervention["problem"])
-        result["bins"].append(intervention["bin"])
-        result["positions"].append(intervention["position"])
-        result["entropies"].append(intervention["entropy"])
-        result["original_tokens"].append(intervention["original"])
-        result["changed_tokens"].append(intervention["changed"])
-        for offset, condition in enumerate(["original", "changed"]):
-            continuations = outputs[2 * intervention_index + offset].outputs
+    for swap_index, swap in enumerate(swaps):
+        result["problem_indices"].append(swap["problem_index"])
+        result["entropy_bins"].append(swap["entropy_bin"])
+        result["positions"].append(swap["position"])
+        result["entropies"].append(swap["entropy"])
+        result["original_token_ids"].append(swap["original_token_id"])
+        result["swapped_token_ids"].append(swap["swapped_token_id"])
+        for offset, condition in enumerate(["original", "swapped"]):
+            continuations = outputs[2 * swap_index + offset].outputs
             continuation_ids += [torch.tensor(continuation.token_ids, dtype=torch.int32) for continuation in continuations]
-            evaluated = evaluate_math500(continuations, [intervention["answer"]] * len(continuations), tokenizer)
-            prefix_ids = intervention["think_ids"] + [intervention[condition]]
+            evaluated = evaluate_math500(continuations, [swap["answer"]] * len(continuations), tokenizer)
+            prefix_ids = swap["think_ids"] + [swap[f"{condition}_token_id"]]
             thinks = [tokenizer.decode(prefix_ids + list(continuation.token_ids)[:think_len], skip_special_tokens=True) for continuation, think_len in zip(continuations, evaluated["think_lens"])]
             result[f"{condition}_corrects"].append(evaluated["corrects"])
             result[f"{condition}_think_lens"].append([len(prefix_ids) + think_len for think_len in evaluated["think_lens"]])
             result[f"{condition}_loop_ratios"].append(get_loop_ratio({"thinks": thinks}))
 
     for bin_index in range(config.num_bins):
-        in_bin = [position_bin == bin_index for position_bin in result["bins"]]
-        accuracies = [mean(mean(corrects) for corrects, used in zip(result[f"{condition}_corrects"], in_bin) if used) for condition in ["original", "changed"]]
-        loop_ratios = [mean(loop_ratio for loop_ratio, used in zip(result[f"{condition}_loop_ratios"], in_bin) if used) for condition in ["original", "changed"]]
+        in_bin = [position_bin == bin_index for position_bin in result["entropy_bins"]]
+        accuracies = [mean(mean(corrects) for corrects, used in zip(result[f"{condition}_corrects"], in_bin) if used) for condition in ["original", "swapped"]]
+        loop_ratios = [mean(loop_ratio for loop_ratio, used in zip(result[f"{condition}_loop_ratios"], in_bin) if used) for condition in ["original", "swapped"]]
         print(f"bin {bin_index} accuracy {accuracies[0]:.2%} -> {accuracies[1]:.2%} loop {loop_ratios[0]:.2%} -> {loop_ratios[1]:.2%}")
     print(f"{target} time {format_duration(time.perf_counter() - log_time)}")
     save_result("sensitivity/math500", target, file_name, result)
-    save_tensors("sensitivity/math500", target, file_name, {"token_ids": torch.cat(continuation_ids), "lengths": torch.tensor([len(ids) for ids in continuation_ids]).view(len(interventions), 2, config.num_continuations)})
+    save_tensors("sensitivity/math500", target, file_name, {"continuation_ids": torch.cat(continuation_ids), "continuation_lens": torch.tensor([len(ids) for ids in continuation_ids]).view(len(swaps), 2, config.num_continuations)})
 
 
 if __name__ == "__main__":
